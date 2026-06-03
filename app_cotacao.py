@@ -301,6 +301,23 @@ st.markdown(f"""
     color: rgba(255,255,255,0.55) !important;
     opacity: 1 !important;
   }}
+
+  /* ── Texto dos expanders ("Ver itens lidos") legível no fundo claro ── */
+  [data-testid="stExpander"] summary,
+  [data-testid="stExpander"] p,
+  [data-testid="stExpander"] li,
+  [data-testid="stExpander"] span,
+  [data-testid="stExpander"] div {{
+    color: {NAVY} !important;
+  }}
+  /* mantém os expanders da barra lateral (fundo escuro) com texto claro */
+  [data-testid="stSidebar"] [data-testid="stExpander"] summary,
+  [data-testid="stSidebar"] [data-testid="stExpander"] p,
+  [data-testid="stSidebar"] [data-testid="stExpander"] li,
+  [data-testid="stSidebar"] [data-testid="stExpander"] span,
+  [data-testid="stSidebar"] [data-testid="stExpander"] div {{
+    color: #d8e4ff !important;
+  }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -899,42 +916,34 @@ with st.sidebar:
                                 help="Digite o CNPJ e clique em Buscar para preencher automaticamente")
     buscar_btn = st.button("🔍 Buscar dados na Receita Federal", use_container_width=True)
 
-    # Inicializar session state
-    for k in ["nome","endereco","telefone","email","fantasia"]:
-        if f"c_{k}" not in st.session_state: st.session_state[f"c_{k}"] = ""
+    # Inicializar as chaves dos campos (uma única fonte da verdade = a chave do widget)
+    for k in ["input_nome","input_fantasia","input_end","input_tel","input_email"]:
+        if k not in st.session_state: st.session_state[k] = ""
 
     if buscar_btn and cnpj_input.strip():
         with st.spinner("Consultando Receita Federal..."):
             dados, erro = buscar_cnpj(cnpj_input)
         if dados:
-            st.session_state["c_nome"]     = dados["nome"]
-            st.session_state["c_fantasia"] = dados.get("fantasia","")
-            st.session_state["c_endereco"] = dados["endereco"]
-            st.session_state["c_telefone"] = dados["telefone"]
-            st.session_state["c_email"]    = dados["email"]
-            sit = dados.get("situacao","")
+            # Escreve DIRETO nas chaves dos widgets (antes deles serem criados neste run)
+            st.session_state["input_nome"]     = dados["nome"]
+            st.session_state["input_fantasia"] = dados.get("fantasia","")
+            st.session_state["input_end"]      = dados["endereco"]
+            st.session_state["input_tel"]      = dados["telefone"]
+            st.session_state["input_email"]    = dados["email"]
+            sit  = dados.get("situacao","")
             ativ = dados.get("atividade","")
             st.success(f"✅ {dados['nome']}")
-            if sit: st.caption(f"Situação: {sit}")
+            if sit:  st.caption(f"Situação: {sit}")
             if ativ: st.caption(f"Atividade: {ativ}")
         else:
             st.error(f"❌ {erro}")
 
-    nome     = st.text_input("Nome / Razão Social", value=st.session_state["c_nome"],
-                              placeholder="Construtora ABC Ltda",  key="input_nome")
-    st.session_state["c_nome"] = nome
-    fantasia = st.text_input("Nome Fantasia", value=st.session_state["c_fantasia"],
-                              placeholder="(opcional)", key="input_fantasia")
-    st.session_state["c_fantasia"] = fantasia
-    endereco = st.text_input("Endereço", value=st.session_state["c_endereco"],
-                              placeholder="Rua X, 123 - Bairro - Cidade", key="input_end")
-    st.session_state["c_endereco"] = endereco
-    telefone = st.text_input("Telefone", value=st.session_state["c_telefone"],
-                              placeholder="(11) 9999-9999", key="input_tel")
-    st.session_state["c_telefone"] = telefone
-    email    = st.text_input("E-mail", value=st.session_state["c_email"],
-                              placeholder="contato@cliente.com.br", key="input_email")
-    st.session_state["c_email"] = email
+    # Campos: só 'key' (sem value=), para a busca de CNPJ poder preenchê-los
+    nome     = st.text_input("Nome / Razão Social", placeholder="Construtora ABC Ltda", key="input_nome")
+    fantasia = st.text_input("Nome Fantasia", placeholder="(opcional)", key="input_fantasia")
+    endereco = st.text_input("Endereço", placeholder="Rua X, 123 - Bairro - Cidade", key="input_end")
+    telefone = st.text_input("Telefone", placeholder="(11) 9999-9999", key="input_tel")
+    email    = st.text_input("E-mail", placeholder="contato@cliente.com.br", key="input_email")
 
     st.markdown("---")
     st.markdown("### ⚙️ Configurações")
