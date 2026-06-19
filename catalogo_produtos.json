@@ -4510,5 +4510,1045 @@
     "preco": 2337.1,
     "tabela": "PRESSAO_JGS",
     "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tubo P/P SMU",
+    "tamanho": "50mm",
+    "descricao": "Tubo P/P SMU 50mm",
+    "preco": 559.98,
+    "tabela": "SMU",
+    "ncm": "7303.00.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "50 x 50",
+    "descricao": "Juncao SMU 45 50 x 50",
+    "preco": 99.97,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid JRSMU",
+    "tamanho": "50mm",
+    "descricao": "Junta Rapid JRSMU 50mm",
+    "preco": 29.17,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tubo P/P SMU",
+    "tamanho": "75mm",
+    "descricao": "Tubo P/P SMU 75mm",
+    "preco": 769.95,
+    "tabela": "SMU",
+    "ncm": "7303.00.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "75 x 50",
+    "descricao": "Juncao SMU 45 75 x 50",
+    "preco": 144.64,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid JRSMU",
+    "tamanho": "75mm",
+    "descricao": "Junta Rapid JRSMU 75mm",
+    "preco": 32.59,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tubo P/P SMU",
+    "tamanho": "100mm",
+    "descricao": "Tubo P/P SMU 100mm",
+    "preco": 853.62,
+    "tabela": "SMU",
+    "ncm": "7303.00.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "75 x 75",
+    "descricao": "Juncao SMU 45 75 x 75",
+    "preco": 177.89,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid JRSMU",
+    "tamanho": "100mm",
+    "descricao": "Junta Rapid JRSMU 100mm",
+    "preco": 39.13,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tubo P/P SMU",
+    "tamanho": "125mm",
+    "descricao": "Tubo P/P SMU 125mm",
+    "preco": 1272.0,
+    "tabela": "SMU",
+    "ncm": "7303.00.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "100 x 50",
+    "descricao": "Juncao SMU 45 100 x 50",
+    "preco": 221.48,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid JRSMU",
+    "tamanho": "125mm",
+    "descricao": "Junta Rapid JRSMU 125mm",
+    "preco": 51.87,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tubo P/P SMU",
+    "tamanho": "150mm",
+    "descricao": "Tubo P/P SMU 150mm",
+    "preco": 1310.0,
+    "tabela": "SMU",
+    "ncm": "7303.00.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "100 x 75",
+    "descricao": "Juncao SMU 45 100 x 75",
+    "preco": 278.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid JRSMU",
+    "tamanho": "150mm",
+    "descricao": "Junta Rapid JRSMU 150mm",
+    "preco": 67.83,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tubo P/P SMU",
+    "tamanho": "200mm",
+    "descricao": "Tubo P/P SMU 200mm",
+    "preco": 1942.54,
+    "tabela": "SMU",
+    "ncm": "7303.00.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "100 x 100",
+    "descricao": "Juncao SMU 45 100 x 100",
+    "preco": 279.93,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid JRSMU",
+    "tamanho": "200mm",
+    "descricao": "Junta Rapid JRSMU 200mm",
+    "preco": 101.6,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tubo P/P SMU",
+    "tamanho": "250mm",
+    "descricao": "Tubo P/P SMU 250mm",
+    "preco": 3157.42,
+    "tabela": "SMU",
+    "ncm": "7303.00.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "125 x 100",
+    "descricao": "Juncao SMU 45 125 x 100",
+    "preco": 452.2,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid JRSMU",
+    "tamanho": "250mm",
+    "descricao": "Junta Rapid JRSMU 250mm",
+    "preco": 412.3,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tubo P/P SMU",
+    "tamanho": "300mm",
+    "descricao": "Tubo P/P SMU 300mm",
+    "preco": 5128.48,
+    "tabela": "SMU",
+    "ncm": "7303.00.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "125 x 125",
+    "descricao": "Juncao SMU 45 125 x 125",
+    "preco": 485.45,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid JRSMU",
+    "tamanho": "300mm",
+    "descricao": "Junta Rapid JRSMU 300mm",
+    "preco": 464.17,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "150 x 100",
+    "descricao": "Juncao SMU 45 150 x 100",
+    "preco": 269.9,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 88",
+    "tamanho": "50mm",
+    "descricao": "Joelho SMU 88 50mm",
+    "preco": 154.28,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "150 x 150",
+    "descricao": "Juncao SMU 45 150 x 150",
+    "preco": 331.2,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid Inox SMU",
+    "tamanho": "50mm",
+    "descricao": "Junta Rapid Inox SMU 50mm",
+    "preco": 44.17,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 88",
+    "tamanho": "75mm",
+    "descricao": "Joelho SMU 88 75mm",
+    "preco": 142.31,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "200 x 100",
+    "descricao": "Juncao SMU 45 200 x 100",
+    "preco": 715.54,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid Inox SMU",
+    "tamanho": "75mm",
+    "descricao": "Junta Rapid Inox SMU 75mm",
+    "preco": 47.88,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 88",
+    "tamanho": "100mm",
+    "descricao": "Joelho SMU 88 100mm",
+    "preco": 148.96,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "200 x 150",
+    "descricao": "Juncao SMU 45 200 x 150",
+    "preco": 991.84,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid Inox SMU",
+    "tamanho": "100mm",
+    "descricao": "Junta Rapid Inox SMU 100mm",
+    "preco": 79.8,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 88",
+    "tamanho": "125mm",
+    "descricao": "Joelho SMU 88 125mm",
+    "preco": 186.28,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "200 x 200",
+    "descricao": "Juncao SMU 45 200 x 200",
+    "preco": 3287.7,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid Inox SMU",
+    "tamanho": "125mm",
+    "descricao": "Junta Rapid Inox SMU 125mm",
+    "preco": 83.79,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 88",
+    "tamanho": "150mm",
+    "descricao": "Joelho SMU 88 150mm",
+    "preco": 218.12,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "250 x 200",
+    "descricao": "Juncao SMU 45 250 x 200",
+    "preco": 4998.1,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid Inox SMU",
+    "tamanho": "150mm",
+    "descricao": "Junta Rapid Inox SMU 150mm",
+    "preco": 93.1,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 88",
+    "tamanho": "200mm",
+    "descricao": "Joelho SMU 88 200mm",
+    "preco": 541.31,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "250 x 250",
+    "descricao": "Juncao SMU 45 250 x 250",
+    "preco": 4504.7,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid Inox SMU",
+    "tamanho": "200mm",
+    "descricao": "Junta Rapid Inox SMU 200mm",
+    "preco": 158.27,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 88",
+    "tamanho": "250mm",
+    "descricao": "Joelho SMU 88 250mm",
+    "preco": 3198.2,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Juncao SMU 45",
+    "tamanho": "300 x 300",
+    "descricao": "Juncao SMU 45 300 x 300",
+    "preco": 6864.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Junta Rapid Inox SMU",
+    "tamanho": "250mm",
+    "descricao": "Junta Rapid Inox SMU 250mm",
+    "preco": 557.2,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 45",
+    "tamanho": "50mm",
+    "descricao": "Joelho SMU 45 50mm",
+    "preco": 85.48,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee c/ Visita SMU",
+    "tamanho": "50mm",
+    "descricao": "Tee c/ Visita SMU 50mm",
+    "preco": 244.72,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Cj. Ancoragem CASMU",
+    "tamanho": "50mm",
+    "descricao": "Cj. Ancoragem CASMU 50mm",
+    "preco": 744.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 45",
+    "tamanho": "75mm",
+    "descricao": "Joelho SMU 45 75mm",
+    "preco": 107.7,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee c/ Visita SMU",
+    "tamanho": "75mm",
+    "descricao": "Tee c/ Visita SMU 75mm",
+    "preco": 401.6,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Cj. Ancoragem CASMU",
+    "tamanho": "75mm",
+    "descricao": "Cj. Ancoragem CASMU 75mm",
+    "preco": 751.6,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 45",
+    "tamanho": "100mm",
+    "descricao": "Joelho SMU 45 100mm",
+    "preco": 117.1,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee c/ Visita SMU",
+    "tamanho": "100mm",
+    "descricao": "Tee c/ Visita SMU 100mm",
+    "preco": 679.91,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Cj. Ancoragem CASMU",
+    "tamanho": "100mm",
+    "descricao": "Cj. Ancoragem CASMU 100mm",
+    "preco": 624.41,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 45",
+    "tamanho": "125mm",
+    "descricao": "Joelho SMU 45 125mm",
+    "preco": 199.98,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee c/ Visita SMU",
+    "tamanho": "125mm",
+    "descricao": "Tee c/ Visita SMU 125mm",
+    "preco": 889.57,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Cj. Ancoragem CASMU",
+    "tamanho": "125mm",
+    "descricao": "Cj. Ancoragem CASMU 125mm",
+    "preco": 690.7,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 45",
+    "tamanho": "150mm",
+    "descricao": "Joelho SMU 45 150mm",
+    "preco": 210.14,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee c/ Visita SMU",
+    "tamanho": "150mm",
+    "descricao": "Tee c/ Visita SMU 150mm",
+    "preco": 1514.2,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Cj. Ancoragem CASMU",
+    "tamanho": "150mm",
+    "descricao": "Cj. Ancoragem CASMU 150mm",
+    "preco": 768.37,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 45",
+    "tamanho": "200mm",
+    "descricao": "Joelho SMU 45 200mm",
+    "preco": 263.34,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee c/ Visita SMU",
+    "tamanho": "200mm",
+    "descricao": "Tee c/ Visita SMU 200mm",
+    "preco": 1957.59,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Cj. Ancoragem CASMU",
+    "tamanho": "200mm",
+    "descricao": "Cj. Ancoragem CASMU 200mm",
+    "preco": 1759.4,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Joelho SMU 45",
+    "tamanho": "250mm",
+    "descricao": "Joelho SMU 45 250mm",
+    "preco": 973.56,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee c/ Visita SMU",
+    "tamanho": "250mm",
+    "descricao": "Tee c/ Visita SMU 250mm",
+    "preco": 2420.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Cj. Ancoragem CASMU",
+    "tamanho": "250mm",
+    "descricao": "Cj. Ancoragem CASMU 250mm",
+    "preco": 3947.4,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "50 x 50",
+    "descricao": "Tee SMU 50 x 50",
+    "preco": 149.99,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Abracadeira Dent. P/Trav. SMU",
+    "tamanho": "50mm",
+    "descricao": "Abracadeira Dent. P/Trav. SMU 50mm",
+    "preco": 127.25,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "75 x 50",
+    "descricao": "Reducao Exc. SMU 75 x 50",
+    "preco": 111.72,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "75 x 50",
+    "descricao": "Tee SMU 75 x 50",
+    "preco": 134.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Abracadeira Dent. P/Trav. SMU",
+    "tamanho": "75mm",
+    "descricao": "Abracadeira Dent. P/Trav. SMU 75mm",
+    "preco": 139.57,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "100 x 50",
+    "descricao": "Reducao Exc. SMU 100 x 50",
+    "preco": 126.35,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "75 x 75",
+    "descricao": "Tee SMU 75 x 75",
+    "preco": 169.96,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Abracadeira Dent. P/Trav. SMU",
+    "tamanho": "100mm",
+    "descricao": "Abracadeira Dent. P/Trav. SMU 100mm",
+    "preco": 371.84,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "100 x 75",
+    "descricao": "Reducao Exc. SMU 100 x 75",
+    "preco": 164.92,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "100 x 50",
+    "descricao": "Tee SMU 100 x 50",
+    "preco": 332.5,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Abracadeira Dent. P/Trav. SMU",
+    "tamanho": "125mm",
+    "descricao": "Abracadeira Dent. P/Trav. SMU 125mm",
+    "preco": 313.88,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "125 x 75",
+    "descricao": "Reducao Exc. SMU 125 x 75",
+    "preco": 204.82,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "100 x 75",
+    "descricao": "Tee SMU 100 x 75",
+    "preco": 238.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Abracadeira Dent. P/Trav. SMU",
+    "tamanho": "150mm",
+    "descricao": "Abracadeira Dent. P/Trav. SMU 150mm",
+    "preco": 529.3,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "125 x 100",
+    "descricao": "Reducao Exc. SMU 125 x 100",
+    "preco": 206.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "100 x 100",
+    "descricao": "Tee SMU 100 x 100",
+    "preco": 239.94,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Abracadeira Dent. P/Trav. SMU",
+    "tamanho": "200mm",
+    "descricao": "Abracadeira Dent. P/Trav. SMU 200mm",
+    "preco": 903.7,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "150 x 75",
+    "descricao": "Reducao Exc. SMU 150 x 75",
+    "preco": 772.4,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "125 x 125",
+    "descricao": "Tee SMU 125 x 125",
+    "preco": 634.41,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Abracadeira Dent. P/Trav. SMU",
+    "tamanho": "250mm",
+    "descricao": "Abracadeira Dent. P/Trav. SMU 250mm",
+    "preco": 1588.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "150 x 100",
+    "descricao": "Reducao Exc. SMU 150 x 100",
+    "preco": 405.65,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "150 x 75",
+    "descricao": "Tee SMU 150 x 75",
+    "preco": 1520.2,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "150 x 125",
+    "descricao": "Reducao Exc. SMU 150 x 125",
+    "preco": 433.8,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "150 x 100",
+    "descricao": "Tee SMU 150 x 100",
+    "preco": 555.94,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Captador BRIDGE SMU",
+    "tamanho": "50mm",
+    "descricao": "Captador BRIDGE SMU 50mm",
+    "preco": 1954.1,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "200 x 75",
+    "descricao": "Reducao Exc. SMU 200 x 75",
+    "preco": 1049.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "150 x 150",
+    "descricao": "Tee SMU 150 x 150",
+    "preco": 573.23,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Captador BRIDGE SMU",
+    "tamanho": "75mm",
+    "descricao": "Captador BRIDGE SMU 75mm",
+    "preco": 2573.3,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "200 x 100",
+    "descricao": "Reducao Exc. SMU 200 x 100",
+    "preco": 383.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "200 x 200",
+    "descricao": "Tee SMU 200 x 200",
+    "preco": 944.3,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Captador BRIDGE SMU",
+    "tamanho": "100mm",
+    "descricao": "Captador BRIDGE SMU 100mm",
+    "preco": 4073.85,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "200 x 125",
+    "descricao": "Reducao Exc. SMU 200 x 125",
+    "preco": 482.8,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "250 x 250",
+    "descricao": "Tee SMU 250 x 250",
+    "preco": 3136.14,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "200 x 150",
+    "descricao": "Reducao Exc. SMU 200 x 150",
+    "preco": 541.81,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tee SMU",
+    "tamanho": "300 x 300",
+    "descricao": "Tee SMU 300 x 300",
+    "preco": 6837.53,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Captador PLATINE SMU",
+    "tamanho": "50mm",
+    "descricao": "Captador PLATINE SMU 50mm",
+    "preco": 2177.58,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "250 x 75",
+    "descricao": "Reducao Exc. SMU 250 x 75",
+    "preco": 1501.5,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Captador PLATINE SMU",
+    "tamanho": "75mm",
+    "descricao": "Captador PLATINE SMU 75mm",
+    "preco": 3549.4,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "250 x 100",
+    "descricao": "Reducao Exc. SMU 250 x 100",
+    "preco": 1111.88,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tampao Simples SMU",
+    "tamanho": "50mm",
+    "descricao": "Tampao Simples SMU 50mm",
+    "preco": 18.58,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Captador PLATINE SMU",
+    "tamanho": "100mm",
+    "descricao": "Captador PLATINE SMU 100mm",
+    "preco": 3692.35,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "250 x 150",
+    "descricao": "Reducao Exc. SMU 250 x 150",
+    "preco": 688.94,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tampao Simples SMU",
+    "tamanho": "75mm",
+    "descricao": "Tampao Simples SMU 75mm",
+    "preco": 57.19,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "250 x 200",
+    "descricao": "Reducao Exc. SMU 250 x 200",
+    "preco": 894.8,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tampao Simples SMU",
+    "tamanho": "100mm",
+    "descricao": "Tampao Simples SMU 100mm",
+    "preco": 62.51,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Tampao Exp SMU",
+    "tamanho": "50mm",
+    "descricao": "Tampao Exp SMU 50mm",
+    "preco": 108.38,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "300 x 75",
+    "descricao": "Reducao Exc. SMU 300 x 75",
+    "preco": 1506.9,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tampao Simples SMU",
+    "tamanho": "125mm",
+    "descricao": "Tampao Simples SMU 125mm",
+    "preco": 85.53,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Tampao Exp SMU",
+    "tamanho": "75mm",
+    "descricao": "Tampao Exp SMU 75mm",
+    "preco": 114.37,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "300 x 100",
+    "descricao": "Reducao Exc. SMU 300 x 100",
+    "preco": 1453.0,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tampao Simples SMU",
+    "tamanho": "150mm",
+    "descricao": "Tampao Simples SMU 150mm",
+    "preco": 130.34,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Tampao Exp SMU",
+    "tamanho": "100mm",
+    "descricao": "Tampao Exp SMU 100mm",
+    "preco": 275.31,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "300 x 150",
+    "descricao": "Reducao Exc. SMU 300 x 150",
+    "preco": 880.6,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tampao Simples SMU",
+    "tamanho": "200mm",
+    "descricao": "Tampao Simples SMU 200mm",
+    "preco": 670.3,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Tampao Exp SMU",
+    "tamanho": "125mm",
+    "descricao": "Tampao Exp SMU 125mm",
+    "preco": 341.75,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "300 x 200",
+    "descricao": "Reducao Exc. SMU 300 x 200",
+    "preco": 889.9,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tampao Simples SMU",
+    "tamanho": "250mm",
+    "descricao": "Tampao Simples SMU 250mm",
+    "preco": 485.54,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Tampao Exp SMU",
+    "tamanho": "150mm",
+    "descricao": "Tampao Exp SMU 150mm",
+    "preco": 466.83,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Reducao Exc. SMU",
+    "tamanho": "300 x 250",
+    "descricao": "Reducao Exc. SMU 300 x 250",
+    "preco": 909.7,
+    "tabela": "SMU",
+    "ncm": "7307.11.00"
+  },
+  {
+    "categoria": "Tampao Simples SMU",
+    "tamanho": "300mm",
+    "descricao": "Tampao Simples SMU 300mm",
+    "preco": 723.52,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Tampao Exp SMU",
+    "tamanho": "200mm",
+    "descricao": "Tampao Exp SMU 200mm",
+    "preco": 1146.6,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Tampao Exp SMU",
+    "tamanho": "250mm",
+    "descricao": "Tampao Exp SMU 250mm",
+    "preco": 1524.0,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
+  },
+  {
+    "categoria": "Tampao Exp SMU",
+    "tamanho": "300mm",
+    "descricao": "Tampao Exp SMU 300mm",
+    "preco": 1669.2,
+    "tabela": "SMU",
+    "ncm": "7325.10.00"
   }
 ]

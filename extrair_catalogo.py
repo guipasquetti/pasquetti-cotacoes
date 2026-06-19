@@ -221,6 +221,7 @@ def main():
         ("HL CONSUMO", parse_hl_table, ("CONSUMO",), "HL_CONSUMO"),
         ("HL REVENDA", parse_hl_table, ("REVENDA",), "HL_REVENDA"),
         ("PRESSÃO JGS", parse_pressao_table, ("PRESS",), None),
+        ("SMU", parse_hl_table, ("SMU",), "SMU"),
     ]
 
     for label, func, palavras, tipo in fontes:

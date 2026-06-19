@@ -14,6 +14,14 @@ try:
     import matcher_ia
 except Exception:
     matcher_ia = None
+try:
+    import dados_supabase
+except Exception:
+    dados_supabase = None
+try:
+    from streamlit_searchbox import st_searchbox
+except Exception:
+    st_searchbox = None
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
@@ -42,6 +50,12 @@ def _secret(nome):
 _chave_servidor = _secret("ANTHROPIC_API_KEY")
 if _chave_servidor and not os.environ.get("ANTHROPIC_API_KEY"):
     os.environ["ANTHROPIC_API_KEY"] = _chave_servidor
+
+# Credenciais do Supabase (aprendizado + ST) vindas dos segredos na web
+for _k in ("SUPABASE_URL", "SUPABASE_KEY"):
+    _v = _secret(_k)
+    if _v and not os.environ.get(_k):
+        os.environ[_k] = _v
 
 def _checar_senha():
     """Se houver APP_PASSWORD nos segredos, exige senha. Sem senha definida, libera."""
@@ -86,12 +100,40 @@ LOGO_SVG = """
 </svg>
 """
 
-# Carregar logo real se existir
-def get_logo_b64():
-    if LOGO_PATH.exists():
-        with open(LOGO_PATH, "rb") as f:
-            return base64.b64encode(f.read()).decode()
+# Logos reais (horizontal p/ cabeçalho e Excel; vertical p/ barra lateral).
+LOGO_HORIZ = SCRIPT_DIR / "logo_horizontal.png"
+LOGO_VERT  = SCRIPT_DIR / "logo_vertical.png"
+
+def _b64_de(path):
+    try:
+        if path and path.exists():
+            return base64.b64encode(path.read_bytes()).decode()
+    except Exception:
+        pass
     return None
+
+def logo_b64(prefer="horizontal"):
+    """Retorna base64 do logo preferido, com fallback para as outras versões."""
+    if prefer == "vertical":
+        ordem = [LOGO_VERT, LOGO_HORIZ, LOGO_PATH]
+    else:
+        ordem = [LOGO_HORIZ, LOGO_PATH, LOGO_VERT]
+    for p in ordem:
+        b = _b64_de(p)
+        if b:
+            return b
+    return None
+
+def caminho_logo_excel():
+    """Caminho do melhor logo para o Excel (horizontal de preferência)."""
+    for p in (LOGO_HORIZ, LOGO_PATH, LOGO_VERT):
+        if p.exists():
+            return str(p)
+    return None
+
+# Compatibilidade
+def get_logo_b64():
+    return logo_b64("horizontal")
 
 # ════════════════════════════════════════════════════════════════════════════
 # CSS — Identidade Visual Pasquetti
@@ -107,23 +149,56 @@ st.markdown(f"""
 
   /* ── Sidebar ── */
   [data-testid="stSidebar"] {{
-    background: {NAVY} !important;
+    background: linear-gradient(180deg, {NAVY} 0%, #16233f 100%) !important;
     border-right: 3px solid {COPPER} !important;
   }}
-  [data-testid="stSidebar"] * {{ color: #d8e4ff !important; }}
-  [data-testid="stSidebar"] h2,
-  [data-testid="stSidebar"] h3,
+  [data-testid="stSidebar"] * {{ color: #e3ecff !important; }}
   [data-testid="stSidebar"] strong {{ color: #ffffff !important; }}
-  [data-testid="stSidebar"] .stTextInput input,
-  [data-testid="stSidebar"] .stSelectbox select {{
-    background: rgba(255,255,255,0.1) !important;
-    color: white !important;
-    border: 1px solid rgba(255,255,255,0.25) !important;
-    border-radius: 6px !important;
+  /* Cabeçalhos de seção: barra cobre + caixa-alta */
+  [data-testid="stSidebar"] h2,
+  [data-testid="stSidebar"] h3 {{
+    color: #ffffff !important;
+    font-size: 12.5px !important; font-weight: 700 !important;
+    text-transform: uppercase; letter-spacing: .7px;
+    border-left: 3px solid {COPPER}; padding: 2px 0 2px 10px !important;
+    margin: 4px 0 12px 0 !important;
   }}
-  [data-testid="stSidebar"] .stTextInput input::placeholder {{ color: rgba(255,255,255,0.45) !important; }}
-  [data-testid="stSidebar"] label {{ color: #b8cfff !important; font-size:12px !important; font-weight:500 !important; }}
-  [data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,0.15) !important; }}
+  /* Campos de texto / número */
+  [data-testid="stSidebar"] .stTextInput input,
+  [data-testid="stSidebar"] .stNumberInput input {{
+    background: rgba(255,255,255,0.10) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255,255,255,0.22) !important;
+    border-radius: 8px !important;
+    padding: 9px 12px !important;
+  }}
+  [data-testid="stSidebar"] .stTextInput input:focus,
+  [data-testid="stSidebar"] .stNumberInput input:focus {{
+    border-color: {COPPER} !important;
+    box-shadow: 0 0 0 2px rgba(199,122,52,0.25) !important;
+  }}
+  /* Selectbox (baseweb) sobre fundo escuro */
+  [data-testid="stSidebar"] [data-baseweb="select"] > div {{
+    background: rgba(255,255,255,0.10) !important;
+    border: 1px solid rgba(255,255,255,0.22) !important;
+    border-radius: 8px !important;
+    color: #ffffff !important;
+  }}
+  [data-testid="stSidebar"] [data-baseweb="select"] svg {{ fill: #e3ecff !important; }}
+  [data-testid="stSidebar"] label {{ color: #aec4f2 !important; font-size:12px !important; font-weight:600 !important; }}
+  [data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,0.14) !important; margin: 14px 0 !important; }}
+  /* Botões da barra lateral: legíveis sobre o fundo escuro */
+  [data-testid="stSidebar"] div.stButton > button {{
+    background: rgba(255,255,255,0.10) !important;
+    color: #ffffff !important;
+    border: 1px solid {COPPER} !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+  }}
+  [data-testid="stSidebar"] div.stButton > button:hover {{
+    background: {COPPER} !important;
+    border-color: {COPPER} !important;
+  }}
 
   /* ── Header ── */
   .pq-header {{
@@ -280,13 +355,21 @@ st.markdown(f"""
   #MainMenu, footer, [data-testid="stToolbar"] {{ visibility: hidden !important; }}
 
   /* ── Campos de entrada: contraste no fundo claro (regra global) ── */
-  .stApp input, .stApp textarea {{
+  .stApp input, .stApp textarea,
+  .stApp [data-baseweb="input"] input,
+  .stApp [data-baseweb="base-input"] input,
+  .stApp [data-baseweb="textarea"] textarea {{
     color: {NAVY} !important;
     background: #ffffff !important;
+    -webkit-text-fill-color: {NAVY} !important;
   }}
   .stApp input::placeholder,
-  .stApp textarea::placeholder {{
-    color: #8a97b5 !important;   /* cinza-azulado legível sobre branco */
+  .stApp textarea::placeholder,
+  .stApp [data-baseweb="input"] input::placeholder,
+  .stApp [data-baseweb="base-input"] input::placeholder,
+  .stApp [data-baseweb="textarea"] textarea::placeholder {{
+    color: #556682 !important;
+    -webkit-text-fill-color: #556682 !important;   /* cinza-azulado ESCURO, alto contraste */
     opacity: 1 !important;
   }}
 
@@ -294,11 +377,13 @@ st.markdown(f"""
   [data-testid="stSidebar"] input,
   [data-testid="stSidebar"] textarea {{
     color: #ffffff !important;
-    background: rgba(255,255,255,0.10) !important;
+    -webkit-text-fill-color: #ffffff !important;
+    background: rgba(255,255,255,0.12) !important;
   }}
   [data-testid="stSidebar"] input::placeholder,
   [data-testid="stSidebar"] textarea::placeholder {{
-    color: rgba(255,255,255,0.55) !important;
+    color: #c4d4f5 !important;
+    -webkit-text-fill-color: #c4d4f5 !important;
     opacity: 1 !important;
   }}
 
@@ -399,6 +484,29 @@ def expandir(texto):
     for p, s in SINONIMOS.items():
         t = re.sub(p, s, t, flags=re.IGNORECASE)
     return re.sub(r'\s+', ' ', t).strip()
+
+def _fmt_cnpj(cnpj):
+    d = "".join(ch for ch in str(cnpj or "") if ch.isdigit())
+    if len(d) != 14: return cnpj or ""
+    return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+
+def _fill_cliente(r):
+    """Preenche os campos do cliente na sessão a partir de um registro (base ou SEFAZ)."""
+    st.session_state["input_nome"]     = r.get("nome","") or ""
+    st.session_state["input_fantasia"] = r.get("fantasia","") or ""
+    st.session_state["input_end"]      = r.get("endereco","") or ""
+    st.session_state["input_tel"]      = r.get("telefone","") or ""
+    st.session_state["input_email"]    = r.get("email","") or ""
+    st.session_state["input_cnpj"]     = _fmt_cnpj(r.get("cnpj",""))
+    if r.get("uf"): st.session_state["uf_sel"] = r["uf"]
+
+def cond_similar(texto, lista, limiar=0.7):
+    """Condição cadastrada mais parecida (ratio>=limiar) ou None."""
+    alvo = normalizar(texto); melhor, mr = None, 0.0
+    for c in lista:
+        r = difflib.SequenceMatcher(None, alvo, normalizar(c)).ratio()
+        if r > mr: mr, melhor = r, c
+    return melhor if (melhor and mr >= limiar) else None
 
 def extrair_diametros(texto):
     t = normalizar(texto)
@@ -502,13 +610,15 @@ def _hint_deterministico(descricao, catalogo, n=3):
     return " | ".join(d for _, d in scored[:n])
 
 
-def processar_hibrido(itens_brutos, catalogo, usar_ia):
+def processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes=None):
     """
-    Motor determinístico + (opcional) camada de IA.
-    Quando a IA está ligada, ela é a fonte primária; o determinístico serve de
-    dica e de rede de segurança (se a IA falhar ou perder um match exato fácil).
+    Aprendizado (correções salvas) + motor determinístico + (opcional) IA.
+    Prioridade: 1) correção aprendida (exata) → 2) IA → 3) determinístico.
     Retorna (confirmados, sugestoes, nao_encontrados) no mesmo formato de processar().
     """
+    correcoes = correcoes or {}
+    por_desc = {p["descricao"]: p for p in catalogo}  # produto por descrição
+
     # 1) Determinístico para todos (sempre)
     det = []
     for item in itens_brutos:
@@ -532,6 +642,18 @@ def processar_hibrido(itens_brutos, catalogo, usar_ia):
         # Resultado determinístico como padrão
         prod, score, conf, fonte, just = d["prod"], d["score"], d["conf"], "auto", ""
 
+        # 1) Correção aprendida tem prioridade máxima (match exato normalizado)
+        chave = normalizar(item["descricao"])
+        if chave in correcoes and correcoes[chave] in por_desc:
+            prod = por_desc[correcoes[chave]]
+            score, conf, fonte, just = 100.0, "CONFIRMADO", "aprendizado", "Correção aprendida"
+            base = {"descricao": item["descricao"], "quantidade": qtd,
+                    "score": score, "conf": conf, "fonte": fonte, "justificativa": just,
+                    "produto": prod["descricao"], "ncm": prod.get("ncm", ""),
+                    "preco": prod["preco"], "total": qtd * prod["preco"]}
+            confirmados.append(base)
+            continue
+
         if ia_res is not None:
             r = ia_res[i]
             ia_prod = catalogo[r["indice"]] if r["indice"] is not None else None
@@ -543,8 +665,11 @@ def processar_hibrido(itens_brutos, catalogo, usar_ia):
             elif d["conf"] == "CONFIRMADO":
                 prod, score, conf, fonte = d["prod"], d["score"], "CONFIRMADO", "auto"
             else:
-                prod, score, conf = None, r["confianca"], "NÃO ENCONTRADO"
-                just = r.get("justificativa", "")
+                # Mantém o melhor palpite do motor determinístico como sugestão,
+                # para que NENHUM item fique sem candidato na lista de aprendizado.
+                prod = d["prod"]
+                score, conf = d["score"], "NÃO ENCONTRADO"
+                just = r.get("justificativa", "") or "Melhor palpite (revisar)"
 
         base = {"descricao": item["descricao"], "quantidade": qtd,
                 "score": score, "conf": conf, "fonte": fonte, "justificativa": just}
@@ -561,11 +686,11 @@ def processar_hibrido(itens_brutos, catalogo, usar_ia):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# BUSCA CNPJ (BrasilAPI — Receita Federal)
+# BUSCA CNPJ (BrasilAPI — SEFAZ)
 # ════════════════════════════════════════════════════════════════════════════
 
 def buscar_cnpj(cnpj_raw: str):
-    """Consulta dados da empresa pelo CNPJ via BrasilAPI (Receita Federal)."""
+    """Consulta dados da empresa pelo CNPJ via BrasilAPI (SEFAZ)."""
     try:
         import urllib.request, ssl
         cnpj = re.sub(r'\D', '', cnpj_raw)
@@ -592,6 +717,7 @@ def buscar_cnpj(cnpj_raw: str):
             "fantasia":     data.get("nome_fantasia",""),
             "cnpj_fmt":     f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}",
             "endereco":     endereco,
+            "uf":           (data.get("uf","") or "").strip().upper(),
             "telefone":     tel,
             "email":        data.get("email",""),
             "situacao":     data.get("descricao_situacao_cadastral",""),
@@ -600,7 +726,7 @@ def buscar_cnpj(cnpj_raw: str):
     except Exception as e:
         msg = str(e)
         if "404" in msg:
-            return None, "CNPJ não encontrado na Receita Federal."
+            return None, "CNPJ não encontrado na SEFAZ."
         if "timeout" in msg.lower() or "urlopen" in msg.lower():
             return None, "Sem conexão com a internet. Preencha os dados manualmente."
         return None, f"Erro ao consultar: {msg}"
@@ -676,7 +802,8 @@ def carregar_catalogo(tabela):
     if not CATALOG_JSON.exists(): return []
     with open(CATALOG_JSON, encoding="utf-8") as f: todos = json.load(f)
     mapa = {"consumo":["HL_CONSUMO"],"revenda":["HL_REVENDA"],
-            "pressao":["PRESSAO_JGS"],"todos":["HL_CONSUMO","HL_REVENDA","PRESSAO_JGS"]}
+            "pressao":["PRESSAO_JGS"],"smu":["SMU"],
+            "todos":["HL_CONSUMO","HL_REVENDA","PRESSAO_JGS","SMU"]}
     catalogo = [p for p in todos if p["tabela"] in mapa.get(tabela,["HL_CONSUMO"])]
     for p in catalogo: p["_norm"] = expandir(p["descricao"])
     return catalogo
@@ -692,7 +819,7 @@ def bd(e="thin"):
 def bb():
     return Border(bottom=Side(style="thin"))
 
-def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabela_nome):
+def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabela_nome, vendedor="", condicao_pagamento="À vista"):
     wb = openpyxl.Workbook()
     ws = wb.active; ws.title = "Orçamento"
     COR_H, COR_L = "1B3065", "E8EEF8"
@@ -700,6 +827,19 @@ def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabe
 
     for i, w in enumerate([5,44,14,10,13,10,8,13,15],1):
         ws.column_dimensions[get_column_letter(i)].width = w
+
+    # Logo no canto superior esquerdo (sobre as colunas A–B)
+    _logo_path = caminho_logo_excel()
+    if _logo_path:
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            img = XLImage(_logo_path)
+            ratio = (img.height / img.width) if img.width else 0.3
+            img.width = 260
+            img.height = int(260 * ratio)
+            ws.add_image(img, "A2")
+        except Exception:
+            pass
 
     ROW = 2
     ws.row_dimensions[ROW].height = 32
@@ -779,26 +919,45 @@ def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabe
         c.fill = PatternFill("solid",fgColor=COR_H)
         c.alignment = Alignment(horizontal=a,vertical="center"); c.border = bd()
 
-    subtotal = 0
+    # Linhas de itens — com FÓRMULAS (Unit c/ Imp e Valor Total recalculam sozinhos)
+    first_data = ROW + 1
     for k,item in enumerate(confirmados):
         ROW+=1; ws.row_dimensions[ROW].height = 20
         bg = COR_L if k%2==0 else "FFFFFF"
-        for j,(v,f,a) in enumerate(zip(
-            [item["produto"],item["ncm"],item["quantidade"],item["preco"],0.0,0.0,item["preco"],item["total"]],
-            [None,None,'#,##0.00','#,##0.0000','#,##0.00','#,##0.00','#,##0.0000','#,##0.00'],
-            ["left","center","center","right","right","right","right","right"]),2):
+        # B produto | C ncm | D qtd | E unit | F icms_st(unit) | G ipi(unit)
+        # H unit c/ imp = E+F+G | I total = D*H
+        valores = [item["produto"], item["ncm"], item["quantidade"], item["preco"],
+                   float(item.get("st_unit", 0.0)), 0.0, f"=E{ROW}+F{ROW}+G{ROW}", f"=D{ROW}*H{ROW}"]
+        fmts    = [None, None, '#,##0.###', '#,##0.0000', '#,##0.0000',
+                   '#,##0.0000', '#,##0.0000', '#,##0.00']
+        aligns  = ["left","center","center","right","right","right","right","right"]
+        for j,(v,f,a) in enumerate(zip(valores, fmts, aligns), 2):
             c = ws.cell(row=ROW,column=j,value=v)
             c.font = Font(name="Calibri",size=9)
             c.fill = PatternFill("solid",fgColor=bg)
             c.alignment = Alignment(horizontal=a,vertical="center",wrap_text=(j==2))
             c.border = bd()
             if f: c.number_format = f
-        subtotal += item["total"]
+    has_rows = bool(confirmados)
+    last_data = ROW if has_rows else None
 
-    # Totais
+    # Totais — fórmulas de soma
+    if has_rows:
+        rD, rE, rF = f"D{first_data}:D{last_data}", f"E{first_data}:E{last_data}", f"F{first_data}:F{last_data}"
+        rG, rI = f"G{first_data}:G{last_data}", f"I{first_data}:I{last_data}"
+        qtd_f      = f"=SUM({rD})"
+        subtotal_f = f"=SUMPRODUCT({rD},{rE})"
+        ipi_f      = f"=SUMPRODUCT({rD},{rG})"
+        icms_f     = f"=SUMPRODUCT({rD},{rF})"
+        total_f    = f"=SUM({rI})"
+    else:
+        qtd_f = subtotal_f = ipi_f = icms_f = total_f = 0
+
     ROW+=1; ws.row_dimensions[ROW].height = 6
-    for lbl,val,bold in [("Subtotal:",subtotal,False),("IPI:",0,False),
-                          ("ICMS ST:",0,False),("Total:",subtotal,True)]:
+    for lbl,val,bold,nf in [("Subtotal:",subtotal_f,False,'#,##0.00'),
+                            ("IPI:",ipi_f,False,'#,##0.00'),
+                            ("ICMS ST:",icms_f,False,'#,##0.00'),
+                            ("Total:",total_f,True,'#,##0.00')]:
         ROW+=1; ws.row_dimensions[ROW].height = 18
         ws.merge_cells(f"B{ROW}:H{ROW}"); c = ws[f"B{ROW}"]
         c.value = lbl; c.font = Font(name="Calibri",bold=bold,size=10,color=COR_H if bold else "444444")
@@ -806,7 +965,7 @@ def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabe
         c2 = ws.cell(row=ROW,column=9,value=val)
         c2.font = Font(name="Calibri",bold=bold,size=10,color=COR_H if bold else "444444")
         c2.alignment = Alignment(horizontal="right",vertical="center")
-        c2.number_format = '#,##0.00'
+        c2.number_format = nf
         if bold: c2.border = bd()
 
     # Condições
@@ -815,8 +974,8 @@ def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabe
     c.value = "Vencimentos e Condições"; c.border = bb()
     c.font = Font(name="Calibri",bold=True,size=12,color=COR_H)
     c.alignment = Alignment(horizontal="left",vertical="center")
-    for lbl,val in [("Tabela utilizada:",tabela_nome),("Pagamento:","A Vista"),
-                    ("Validade:","30 dias"),
+    for lbl,val in [("Vendedor:",vendedor or "—"),
+                    ("Pagamento:",condicao_pagamento or "À vista"),("Prazo da proposta:","10 dias"),
                     ("Obs.:","Preços sujeitos a alteração sem aviso prévio | Entrega sujeita a confirmação de estoque")]:
         ROW+=1; ws.row_dimensions[ROW].height = 16
         ws.cell(row=ROW,column=2,value=lbl).font = Font(name="Calibri",bold=True,size=10)
@@ -874,15 +1033,8 @@ def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabe
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Cabeçalho ──────────────────────────────────────────────────────────────
-logo_b64 = get_logo_b64()
-if logo_b64:
-    logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="height:52px;object-fit:contain;" />'
-else:
-    logo_html = LOGO_SVG
-
 st.markdown(f"""
 <div class="pq-header">
-  {logo_html}
   <div>
     <p class="pq-title">Gerador de Cotações</p>
     <p class="pq-sub">Preencha os dados do cliente, insira os itens e clique em Gerar Cotação</p>
@@ -894,8 +1046,13 @@ st.markdown(f"""
 
 # ── Sidebar ────────────────────────────────────────────────────────────────
 with st.sidebar:
-    if logo_b64:
-        st.markdown(f'<div style="text-align:center;padding:8px 0 16px;"><img src="data:image/png;base64,{logo_b64}" style="max-width:90%;max-height:60px;object-fit:contain;" /></div>', unsafe_allow_html=True)
+    _logo_v = logo_b64("vertical")
+    if _logo_v:
+        # Caixa branca para o logo (texto navy) aparecer no sidebar escuro.
+        st.markdown(
+            f'<div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:16px;text-align:center;">'
+            f'<img src="data:image/png;base64,{_logo_v}" style="max-width:100%;max-height:130px;object-fit:contain;" /></div>',
+            unsafe_allow_html=True)
     else:
         st.markdown(f"""
         <div style="text-align:center;padding:16px 0;border-bottom:1px solid rgba(255,255,255,0.15);margin-bottom:12px;">
@@ -911,47 +1068,156 @@ with st.sidebar:
 
     st.markdown("### 👤 Dados do Cliente")
 
-    # CNPJ com busca automática
-    cnpj_input = st.text_input("CNPJ", placeholder="00.000.000/0001-00",
-                                help="Digite o CNPJ e clique em Buscar para preencher automaticamente")
-    buscar_btn = st.button("🔍 Buscar dados na Receita Federal", use_container_width=True)
-
-    # Inicializar as chaves dos campos (uma única fonte da verdade = a chave do widget)
-    for k in ["input_nome","input_fantasia","input_end","input_tel","input_email"]:
+    for k in ["input_nome","input_fantasia","input_end","input_tel","input_email","input_cnpj"]:
         if k not in st.session_state: st.session_state[k] = ""
 
-    if buscar_btn and cnpj_input.strip():
-        with st.spinner("Consultando Receita Federal..."):
-            dados, erro = buscar_cnpj(cnpj_input)
-        if dados:
-            # Escreve DIRETO nas chaves dos widgets (antes deles serem criados neste run)
-            st.session_state["input_nome"]     = dados["nome"]
-            st.session_state["input_fantasia"] = dados.get("fantasia","")
-            st.session_state["input_end"]      = dados["endereco"]
-            st.session_state["input_tel"]      = dados["telefone"]
-            st.session_state["input_email"]    = dados["email"]
-            sit  = dados.get("situacao","")
-            ativ = dados.get("atividade","")
-            st.success(f"✅ {dados['nome']}")
-            if sit:  st.caption(f"Situação: {sit}")
-            if ativ: st.caption(f"Atividade: {ativ}")
-        else:
-            st.error(f"❌ {erro}")
-
-    # Campos: só 'key' (sem value=), para a busca de CNPJ poder preenchê-los
+    # Busca ÚNICA do cliente: procura na base e, se não achar, oferece a SEFAZ no MESMO campo
+    if dados_supabase and dados_supabase.disponivel() and st_searchbox is not None:
+        def _busca_cli(q):
+            out = []
+            _regs = dados_supabase.buscar_clientes(q)
+            for c in _regs:
+                out.append((f"💾 {_fmt_cnpj(c.get('cnpj',''))} — {c.get('nome','')}", "BASE::"+c.get("cnpj","")))
+            _dig = "".join(ch for ch in (q or "") if ch.isdigit())
+            if len(_dig) >= 8 and not any(c.get("cnpj")==_dig for c in _regs):
+                _rot = _fmt_cnpj(_dig) if len(_dig)==14 else _dig
+                out.append((f"🌐 Buscar {_rot} na SEFAZ", "SEFAZ::"+_dig))
+            return out
+        _sel = st_searchbox(_busca_cli, key="cli_search",
+                            placeholder="🔎 cliente: digite CNPJ ou nome")
+        if _sel and st.session_state.get("cli_carregado") != _sel:
+            st.session_state["cli_carregado"] = _sel
+            if _sel.startswith("BASE::"):
+                _cn = _sel[6:]
+                _rs = dados_supabase.buscar_clientes(_cn)
+                _r = next((x for x in _rs if x.get("cnpj")==_cn), (_rs[0] if _rs else None))
+                if _r:
+                    _fill_cliente(_r); st.rerun()
+            elif _sel.startswith("SEFAZ::"):
+                _cn = _sel[7:]
+                with st.spinner("Consultando SEFAZ..."):
+                    _d, _e = buscar_cnpj(_cn)
+                if _d:
+                    _fill_cliente({"cnpj":_cn,"nome":_d["nome"],"fantasia":_d.get("fantasia",""),
+                                   "endereco":_d["endereco"],"telefone":_d["telefone"],
+                                   "email":_d["email"],"uf":_d.get("uf","")})
+                    try:
+                        dados_supabase.salvar_cliente(_cn,_d["nome"],_d.get("fantasia",""),_d["endereco"],
+                                                      _d["telefone"],_d["email"],_d.get("uf",""))
+                    except Exception:
+                        pass
+                    st.rerun()
+                else:
+                    st.error(f"❌ {_e}")
+        cnpj_input = st.session_state.get("input_cnpj","")
+        if cnpj_input:
+            st.caption(f"📋 CNPJ: **{cnpj_input}**")
+    else:
+        # Modo simples (sem o componente de busca): o PRÓPRIO campo CNPJ faz a busca base/SEFAZ
+        cnpj_input = st.text_input("CNPJ", key="input_cnpj", placeholder="00.000.000/0001-00",
+                                   help="Digite o CNPJ e clique em Buscar — procura na base e, se não achar, na SEFAZ.")
+        if st.button("🔎 Buscar cliente (base / SEFAZ)", use_container_width=True) and cnpj_input.strip():
+            _rs = dados_supabase.buscar_clientes(cnpj_input) if (dados_supabase and dados_supabase.disponivel()) else []
+            _dig = "".join(ch for ch in cnpj_input if ch.isdigit())
+            _r = next((x for x in _rs if x.get("cnpj")==_dig), (_rs[0] if _rs else None))
+            if _r:
+                st.session_state["input_nome"]=_r.get("nome","") or ""
+                st.session_state["input_fantasia"]=_r.get("fantasia","") or ""
+                st.session_state["input_end"]=_r.get("endereco","") or ""
+                st.session_state["input_tel"]=_r.get("telefone","") or ""
+                st.session_state["input_email"]=_r.get("email","") or ""
+                if _r.get("uf"): st.session_state["uf_sel"]=_r["uf"]
+                st.rerun()
+            else:
+                with st.spinner("Consultando SEFAZ..."):
+                    _d, _e = buscar_cnpj(cnpj_input)
+                if _d:
+                    st.session_state["input_nome"]=_d["nome"]; st.session_state["input_fantasia"]=_d.get("fantasia","")
+                    st.session_state["input_end"]=_d["endereco"]; st.session_state["input_tel"]=_d["telefone"]
+                    st.session_state["input_email"]=_d["email"]
+                    if _d.get("uf"): st.session_state["uf_sel"]=_d["uf"]
+                    if dados_supabase and dados_supabase.disponivel():
+                        try:
+                            dados_supabase.salvar_cliente(_dig,_d["nome"],_d.get("fantasia",""),_d["endereco"],
+                                                          _d["telefone"],_d["email"],_d.get("uf",""))
+                        except Exception:
+                            pass
+                    st.rerun()
+                else:
+                    st.error(f"❌ {_e}")
     nome     = st.text_input("Nome / Razão Social", placeholder="Construtora ABC Ltda", key="input_nome")
     fantasia = st.text_input("Nome Fantasia", placeholder="(opcional)", key="input_fantasia")
     endereco = st.text_input("Endereço", placeholder="Rua X, 123 - Bairro - Cidade", key="input_end")
     telefone = st.text_input("Telefone", placeholder="(11) 9999-9999", key="input_tel")
     email    = st.text_input("E-mail", placeholder="contato@cliente.com.br", key="input_email")
 
+    if dados_supabase and dados_supabase.disponivel():
+        if st.button("💾 Salvar cliente no cadastro", use_container_width=True, key="salvar_cli"):
+            if (cnpj_input or "").strip() and (nome or "").strip():
+                try:
+                    dados_supabase.salvar_cliente(cnpj_input, nome, fantasia, endereco, telefone, email,
+                                                  st.session_state.get("uf_sel",""))
+                    st.success("✅ Cliente salvo no cadastro.")
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+            else:
+                st.warning("Preencha ao menos CNPJ e Nome para salvar.")
+
     st.markdown("---")
     st.markdown("### ⚙️ Configurações")
-    tabela = st.selectbox("Tabela de preços", options=["consumo","revenda","pressao","todos"],
+    vendedor = st.selectbox("Vendedor", options=["Marcelo","Guilherme"])
+    _UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA",
+            "PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"]
+    if "uf_sel" not in st.session_state: st.session_state["uf_sel"] = "SP"
+    uf_destino = st.selectbox("UF de destino (para ST)", options=_UFS, key="uf_sel",
+                              help="Usada para aplicar a alíquota de ST por NCM. Preenchida pela busca de CNPJ.")
+    tabela = st.selectbox("Tabela de preços", options=["consumo","revenda","pressao","smu","todos"],
         format_func=lambda x: {"consumo":"🏠 Consumo — HL Mar/2026",
                                 "revenda":"🏪 Revenda — HL Mar/2026",
                                 "pressao":"💧 Pressão — JGS Abr/2026",
+                                "smu":    "🔩 SMU — Fev/2026",
                                 "todos":  "📋 Todas as tabelas"}[x])
+    # ── Condição de pagamento ──
+    BASE_COND = ["À vista","Boleto 28 dias","30/60/90 dias","28/42/56 dias","45/60 dias"]
+    if dados_supabase and dados_supabase.disponivel():
+        cond_lista = dados_supabase.listar_condicoes_pagamento() or BASE_COND
+    else:
+        cond_lista = BASE_COND
+    if "cond_pagamento" not in st.session_state or st.session_state["cond_pagamento"] not in cond_lista:
+        st.session_state["cond_pagamento"] = cond_lista[0]
+    _OUTRA = "✏️ Outra (digitar)…"
+    _opts = cond_lista + [_OUTRA]
+    _cur = st.session_state["cond_pagamento"]
+    cond_sel = st.selectbox("Condição de pagamento", _opts,
+                            index=_opts.index(_cur) if _cur in _opts else 0, key="cond_select")
+    if cond_sel == _OUTRA:
+        nova = st.text_input("Nova condição", key="cond_nova_txt", placeholder="ex.: 30/60 dias")
+        if nova.strip():
+            sim = cond_similar(nova, cond_lista)
+            if sim and normalizar(sim) != normalizar(nova):
+                st.info(f"Parecida com já cadastrada: **{sim}**")
+                _b1, _b2 = st.columns(2)
+                if _b1.button(f"Usar “{sim}”", key="cond_usar", use_container_width=True):
+                    st.session_state["cond_pagamento"] = sim; st.rerun()
+                if _b2.button("Criar nova", key="cond_criar", use_container_width=True):
+                    if dados_supabase and dados_supabase.disponivel():
+                        try: dados_supabase.salvar_condicao_pagamento(nova)
+                        except Exception as e: st.error(f"Erro ao salvar: {e}")
+                    st.session_state["cond_pagamento"] = nova; st.rerun()
+            else:
+                if st.button("➕ Cadastrar e usar", key="cond_add", use_container_width=True):
+                    if dados_supabase and dados_supabase.disponivel():
+                        try: dados_supabase.salvar_condicao_pagamento(nova)
+                        except Exception as e: st.error(f"Erro ao salvar: {e}")
+                    st.session_state["cond_pagamento"] = nova; st.rerun()
+            cond_pagamento = nova
+        else:
+            cond_pagamento = st.session_state["cond_pagamento"]
+    else:
+        st.session_state["cond_pagamento"] = cond_sel
+        cond_pagamento = cond_sel
+    st.caption(f"Na cotação: **{cond_pagamento}**")
+
     num_orcamento = st.text_input("Nº do Orçamento", placeholder="Gerado automaticamente")
     if not num_orcamento:
         import random; num_orcamento = str(random.randint(1000,9999))
@@ -993,6 +1259,28 @@ with st.sidebar:
             if st.button("Salvar e ativar IA") and nova.strip():
                 matcher_ia.salvar_config(nova, modelo)
                 st.success("Chave salva. Recarregue a página para ativar.")
+
+    # ── Substituição Tributária (ST) ──────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📐 Regras de ST")
+    if dados_supabase is None or not dados_supabase.disponivel():
+        st.caption("Banco de aprendizado não configurado — ST não será aplicada.")
+    else:
+        st.caption("Alíquota de ST por NCM e UF de destino. O sistema reaplica sozinho nas próximas cotações.")
+        with st.expander("➕ Cadastrar / atualizar regra de ST"):
+            st_ncm = st.text_input("NCM", placeholder="7307.11.00", key="st_ncm")
+            cuf, cal = st.columns(2)
+            st_uf  = cuf.selectbox("UF", options=_UFS, index=_UFS.index(st.session_state.get("uf_sel","SP")), key="st_uf")
+            st_aliq = cal.number_input("Alíquota ST (%)", min_value=0.0, max_value=100.0, step=0.5, key="st_aliq")
+            if st.button("Salvar regra de ST"):
+                if st_ncm.strip():
+                    try:
+                        dados_supabase.salvar_regra_st(st_ncm, st_uf, st_aliq)
+                        st.success(f"Regra salva: NCM {st_ncm} / {st_uf} = {st_aliq:.1f}%")
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+                else:
+                    st.warning("Informe o NCM.")
 
 
 # ── Área principal ──────────────────────────────────────────────────────────
@@ -1111,9 +1399,36 @@ if gerar and itens_brutos:
                else "Buscando correspondências no catálogo (precisão ≥ 80%)..."
     with st.spinner(spin_msg):
         catalogo  = carregar_catalogo(tabela)
-        conf, sug, nao = processar_hibrido(itens_brutos, catalogo, usar_ia)
+        correcoes = dados_supabase.listar_correcoes(tabela) if (dados_supabase and dados_supabase.disponivel()) else {}
+        conf, sug, nao = processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes)
+
+    # Aplicar ST por item (alíquota por NCM + UF de destino)
+    regras_st = dados_supabase.listar_regras_st() if (dados_supabase and dados_supabase.disponivel()) else {}
+    if regras_st:
+        for it in conf:
+            aliq = regras_st.get((str(it.get("ncm","")).strip(), str(uf_destino).strip().upper()), 0.0)
+            it["st_unit"] = round(it["preco"] * aliq / 100.0, 4) if aliq else 0.0
 
     subtotal = sum(i["total"] for i in conf)
+    total_st = sum(i.get("st_unit",0.0) * i["quantidade"] for i in conf)
+    st.session_state["cotacao"] = {"conf":conf,"sug":sug,"nao":nao,
+        "subtotal":subtotal,"total_st":total_st,"tabela":tabela,"num_orcamento":num_orcamento,
+        "itens_brutos":itens_brutos,"usar_ia":usar_ia}
+    # Cadastra/atualiza o cliente automaticamente para próximas cotações
+    if dados_supabase and dados_supabase.disponivel() and nome and cnpj_input:
+        try:
+            dados_supabase.salvar_cliente(cnpj_input, nome, fantasia, endereco, telefone, email,
+                                          st.session_state.get("uf_sel",""))
+        except Exception:
+            pass
+
+# Render a partir do session_state (sobrevive ao rerun do botão de ensinar/salvar)
+if st.session_state.get("cotacao"):
+    _C = st.session_state["cotacao"]
+    conf, sug, nao = _C["conf"], _C["sug"], _C["nao"]
+    subtotal, total_st = _C["subtotal"], _C["total_st"]
+    tabela = _C.get("tabela", tabela)
+    num_orcamento = _C.get("num_orcamento", num_orcamento)
 
     # Métricas
     st.markdown("---")
@@ -1192,9 +1507,9 @@ if gerar and itens_brutos:
     # Download
     st.markdown("---")
     tabelas_nome = {"consumo":"TABELA HL CONSUMO — Março/2026","revenda":"TABELA HL REVENDA — Março/2026",
-                    "pressao":"TABELA PRESSÃO JGS — Abril/2026","todos":"MÚLTIPLAS TABELAS"}
+                    "pressao":"TABELA PRESSÃO JGS — Abril/2026","smu":"TABELA SMU — Fevereiro/2026","todos":"MÚLTIPLAS TABELAS"}
     cliente_dict = {"nome":nome,"cnpj":cnpj_input,"endereco":endereco,"telefone":telefone,"email":email}
-    xlsx_bytes = gerar_xlsx_bytes(conf, sug, nao, num_orcamento, cliente_dict, tabelas_nome[tabela])
+    xlsx_bytes = gerar_xlsx_bytes(conf, sug, nao, num_orcamento, cliente_dict, tabelas_nome[tabela], vendedor, condicao_pagamento=cond_pagamento)
     nome_arq = f"cotacao_{num_orcamento}_{nome.replace(' ','_')[:18]}.xlsx" if nome else f"cotacao_{num_orcamento}.xlsx"
 
     dcol, icol = st.columns([1,2])
@@ -1203,7 +1518,84 @@ if gerar and itens_brutos:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True)
     with icol:
-        st.info(f"📄 Orçamento **Nº {num_orcamento}** · {len(conf)} itens confirmados · R$ {subtotal:,.2f}")
+        extra_st = f" · ST: R$ {total_st:,.2f}" if total_st else ""
+        st.info(f"📄 Orçamento **Nº {num_orcamento}** · {len(conf)} itens confirmados · R$ {subtotal:,.2f}{extra_st}")
+
+    # ── Ensinar correções (aprendizado) ───────────────────────────────────
+    if dados_supabase is not None and dados_supabase.disponivel():
+        st.markdown("---")
+        st.markdown('<span class="pq-section">🧠 Corrigir e ensinar</span>', unsafe_allow_html=True)
+        st.caption("Se algum item foi casado errado, escolha o produto certo. O sistema aprende e reaplica nas próximas cotações.")
+        catalogo = carregar_catalogo(tabela)
+        opcoes_base = [p["descricao"] for p in catalogo]
+        _norm_base = [(d, normalizar(d)) for d in opcoes_base]
+        revisaveis = sug + nao + conf
+        _icone = {"CONFIRMADO":"✅","SUGESTÃO":"⚠️","NÃO ENCONTRADO":"❌"}
+        st.caption(f"Todos os {len(revisaveis)} itens da cotação estão abaixo. Comece a digitar termos em "
+                   "qualquer ordem (ex.: \"ralo smu\") — a lista suspensa filtra em tempo real.")
+        escolhas = {}
+        for idx, it in enumerate(revisaveis):
+            atual = it.get("produto", "")
+            ic = _icone.get(it.get("conf",""), "")
+            rotulo = f"{ic} **{it['descricao']}**" + (f"  →  _{atual}_" if atual else "  →  _(sem correspondência)_")
+            st.markdown(rotulo)
+            if st_searchbox is not None:
+                def _busca(q, _base=_norm_base, _atual=atual):
+                    if not q or not q.strip():
+                        return [_atual] if _atual else []
+                    toks = normalizar(q).split()
+                    return [d for d, dn in _base if all(t in dn for t in toks)][:25]
+                sel = st_searchbox(_busca, key=f"corr_{num_orcamento}_{idx}",
+                                   placeholder="digite termos em qualquer ordem — ex.: ralo smu",
+                                   default=atual or None)
+                escolhas[idx] = sel or "— manter —"
+            else:
+                q = st.text_input("Buscar produto", key=f"busca_{num_orcamento}_{idx}",
+                                  placeholder="digite termos em qualquer ordem — ex.: ralo smu",
+                                  label_visibility="collapsed")
+                if q.strip():
+                    toks = normalizar(q).split()
+                    matches = [d for d, dn in _norm_base if all(t in dn for t in toks)]
+                else:
+                    matches = [atual] if atual else []
+                n_tot = len(matches); matches = matches[:10]
+                escolhas[idx] = st.radio("Resultado", ["— manter —"] + matches, index=0,
+                                         key=f"corr_{num_orcamento}_{idx}", label_visibility="collapsed")
+                if q.strip() and n_tot == 0:
+                    st.caption("Nenhum produto encontrado com esses termos.")
+                elif n_tot > 10:
+                    st.caption(f"Mostrando 10 de {n_tot} — refine os termos.")
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        if st.button("💾 Salvar, ensinar e refazer cotação", key=f"salvar_{num_orcamento}", type="primary"):
+            n_salvos = 0
+            for idx, it in enumerate(revisaveis):
+                escolhido = escolhas.get(idx)
+                if escolhido and escolhido != "— manter —" and escolhido != it.get("produto"):
+                    try:
+                        dados_supabase.salvar_correcao(it["descricao"], escolhido, tabela, vendedor)
+                        n_salvos += 1
+                    except Exception as e:
+                        st.error(f"Erro ao salvar '{it['descricao']}': {e}")
+            if n_salvos:
+                # Refaz a cotação automaticamente já com as correções aprendidas
+                _ib = _C.get("itens_brutos", [])
+                _ia = _C.get("usar_ia", False)
+                _cat = carregar_catalogo(tabela)
+                _corr = dados_supabase.listar_correcoes(tabela) if (dados_supabase and dados_supabase.disponivel()) else {}
+                _conf, _sug, _nao = processar_hibrido(_ib, _cat, _ia, _corr)
+                _regras = dados_supabase.listar_regras_st() if (dados_supabase and dados_supabase.disponivel()) else {}
+                if _regras:
+                    for _it in _conf:
+                        _aliq = _regras.get((str(_it.get("ncm","")).strip(), str(uf_destino).strip().upper()), 0.0)
+                        _it["st_unit"] = round(_it["preco"] * _aliq / 100.0, 4) if _aliq else 0.0
+                st.session_state["cotacao"].update({
+                    "conf":_conf,"sug":_sug,"nao":_nao,
+                    "subtotal":sum(i["total"] for i in _conf),
+                    "total_st":sum(i.get("st_unit",0.0)*i["quantidade"] for i in _conf)})
+                st.success(f"✅ {n_salvos} correção(ões) salva(s). Refazendo a cotação...")
+                st.rerun()
+            else:
+                st.info("Nada para corrigir — a cotação já está como você quer.")
 
 
 # ── Rodapé ─────────────────────────────────────────────────────────────────
