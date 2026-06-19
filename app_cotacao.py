@@ -1675,24 +1675,33 @@ if st.session_state.get("cotacao"):
         extra_st = f" · ST: R$ {total_st:,.2f}" if total_st else ""
         st.info(f"📄 Orçamento **Nº {num_orcamento}** · {len(conf)} itens confirmados · R$ {subtotal:,.2f}{extra_st}")
 
-    # ── Ensinar correções (aprendizado) ───────────────────────────────────
-    if dados_supabase is not None and dados_supabase.disponivel():
-        st.markdown("---")
-        st.markdown('<span class="pq-section">🧠 Corrigir e ensinar</span>', unsafe_allow_html=True)
-        st.caption("Se algum item foi casado errado, escolha o produto certo. O sistema aprende e reaplica nas próximas cotações.")
-        catalogo = carregar_catalogo(tabela)
-        opcoes_base = [p["descricao"] for p in catalogo]
-        _norm_base = [(d, normalizar(d)) for d in opcoes_base]
-        revisaveis = sug + nao + conf
-        _icone = {"CONFIRMADO":"✅","SUGESTÃO":"⚠️","NÃO ENCONTRADO":"❌"}
-        st.caption(f"Todos os {len(revisaveis)} itens da cotação estão abaixo. Comece a digitar termos em "
-                   "qualquer ordem (ex.: \"ralo smu\") — a lista suspensa filtra em tempo real.")
-        escolhas = {}
-        for idx, it in enumerate(revisaveis):
-            atual = it.get("produto", "")
-            ic = _icone.get(it.get("conf",""), "")
-            rotulo = f"{ic} **{it['descricao']}**" + (f"  →  _{atual}_" if atual else "  →  _(sem correspondência)_")
-            st.markdown(rotulo)
+    # ── Revisar, marcar OK e corrigir — tabela editável ───────────────────────
+    st.markdown("---")
+    st.markdown('<span class="pq-section">🧠 Revisar itens — marque OK ou corrija o produto</span>', unsafe_allow_html=True)
+    _disp_corr = bool(dados_supabase and dados_supabase.disponivel())
+    if not _disp_corr:
+        st.warning("Sem conexão com o banco de aprendizado agora — você pode revisar e corrigir, "
+                   "mas as correções só serão memorizadas quando reconectar.")
+    st.caption("Marque ✔ OK nos itens certos (marcar um item que não veio confirmado também o ensina). "
+               "Para corrigir, digite termos do produto em qualquer ordem (ex.: \"ralo smu\") na lista suspensa.")
+    catalogo = carregar_catalogo(tabela)
+    _norm_base = [(p["descricao"], normalizar(p["descricao"])) for p in catalogo]
+    revisaveis = conf + sug + nao
+    _icone = {"CONFIRMADO":"✅","SUGESTÃO":"⚠️","NÃO ENCONTRADO":"❌"}
+
+    hc = st.columns([3, 4, 1, 1])
+    for _c, _t in zip(hc, ["Solicitado", "Produto no catálogo (digite p/ buscar)", "Qtd", "OK"]):
+        _c.markdown(f"<div style='font-weight:700;color:{NAVY};font-size:12px'>{_t}</div>", unsafe_allow_html=True)
+
+    escolhas = {}
+    for idx, it in enumerate(revisaveis):
+        atual = it.get("produto", "")
+        ic = _icone.get(it.get("conf",""), "")
+        r1, r2, r3, r4 = st.columns([3, 4, 1, 1])
+        with r1:
+            st.markdown(f"<div style='font-size:12px;padding-top:6px'>{ic} <strong>{it['descricao']}</strong></div>",
+                        unsafe_allow_html=True)
+        with r2:
             if st_searchbox is not None:
                 def _busca(q, _base=_norm_base, _atual=atual):
                     if not q or not q.strip():
@@ -1700,33 +1709,44 @@ if st.session_state.get("cotacao"):
                     toks = normalizar(q).split()
                     return [d for d, dn in _base if all(t in dn for t in toks)][:25]
                 sel = st_searchbox(_busca, key=f"corr_{num_orcamento}_{idx}",
-                                   placeholder="digite termos em qualquer ordem — ex.: ralo smu",
-                                   default=atual or None)
-                escolhas[idx] = sel or "— manter —"
+                                   placeholder="digite termos — ex.: ralo smu", default=atual or None)
+                escolhas[idx] = sel or atual or "— manter —"
             else:
-                q = st.text_input("Buscar produto", key=f"busca_{num_orcamento}_{idx}",
-                                  placeholder="digite termos em qualquer ordem — ex.: ralo smu",
-                                  label_visibility="collapsed")
+                q = st.text_input("p", key=f"busca_{num_orcamento}_{idx}",
+                                  placeholder="digite termos — ex.: ralo smu", label_visibility="collapsed")
                 if q.strip():
                     toks = normalizar(q).split()
-                    matches = [d for d, dn in _norm_base if all(t in dn for t in toks)]
+                    matches = [d for d, dn in _norm_base if all(t in dn for t in toks)][:10]
                 else:
                     matches = [atual] if atual else []
-                n_tot = len(matches); matches = matches[:10]
-                escolhas[idx] = st.radio("Resultado", ["— manter —"] + matches, index=0,
-                                         key=f"corr_{num_orcamento}_{idx}", label_visibility="collapsed")
-                if q.strip() and n_tot == 0:
-                    st.caption("Nenhum produto encontrado com esses termos.")
-                elif n_tot > 10:
-                    st.caption(f"Mostrando 10 de {n_tot} — refine os termos.")
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        if st.button("💾 Salvar, ensinar e refazer cotação", key=f"salvar_{num_orcamento}", type="primary"):
+                _opc = ([atual] if atual else ["— manter —"]) + [m for m in matches if m != atual]
+                escolhas[idx] = st.selectbox("p", _opc, key=f"selc_{num_orcamento}_{idx}",
+                                             label_visibility="collapsed")
+        with r3:
+            st.markdown(f"<div style='font-size:12px;padding-top:6px;text-align:center'>{it['quantidade']:.0f}</div>",
+                        unsafe_allow_html=True)
+        with r4:
+            st.checkbox("ok", key=f"ok_{num_orcamento}_{idx}",
+                        value=(it.get("conf") == "CONFIRMADO"), label_visibility="collapsed")
+
+    if st.button("💾 Salvar revisão e refazer cotação", key=f"salvar_{num_orcamento}", type="primary"):
+        if not _disp_corr:
+            st.warning("Sem conexão com o banco — não foi possível memorizar as correções agora.")
+        else:
             n_salvos = 0
+            _desc_set = {p["descricao"] for p in catalogo}
             for idx, it in enumerate(revisaveis):
                 escolhido = escolhas.get(idx)
-                if escolhido and escolhido != "— manter —" and escolhido != it.get("produto"):
+                orig = it.get("produto", "")
+                final = escolhido if (escolhido and escolhido != "— manter —") else orig
+                ok = bool(st.session_state.get(f"ok_{num_orcamento}_{idx}", False))
+                if not final or final not in _desc_set:
+                    continue
+                muda = final != orig
+                confirma = ok and it.get("conf") != "CONFIRMADO"
+                if muda or confirma:
                     try:
-                        dados_supabase.salvar_correcao(it["descricao"], escolhido, tabela, vendedor)
+                        dados_supabase.salvar_correcao(it["descricao"], final, tabela, vendedor)
                         n_salvos += 1
                     except Exception as e:
                         st.error(f"Erro ao salvar '{it['descricao']}': {e}")
@@ -1735,11 +1755,10 @@ if st.session_state.get("cotacao"):
                 _ib = _C.get("itens_brutos", [])
                 _ia = _C.get("usar_ia", False)
                 _cat = carregar_catalogo(tabela)
-                _dispr = bool(dados_supabase and dados_supabase.disponivel())
-                _corr = dados_supabase.listar_correcoes(tabela) if _dispr else {}
-                _nt = dados_supabase.listar_nao_trabalhados() if _dispr else set()
+                _corr = dados_supabase.listar_correcoes(tabela)
+                _nt = dados_supabase.listar_nao_trabalhados()
                 _conf, _sug, _nao, _nao_trab = processar_hibrido(_ib, _cat, _ia, _corr, _nt)
-                _regras = dados_supabase.listar_regras_st() if _dispr else {}
+                _regras = dados_supabase.listar_regras_st()
                 if _regras:
                     for _it in _conf:
                         _aliq = _regras.get((str(_it.get("ncm","")).strip(), str(uf_destino).strip().upper()), 0.0)
@@ -1748,10 +1767,10 @@ if st.session_state.get("cotacao"):
                     "conf":_conf,"sug":_sug,"nao":_nao,"nao_trab":_nao_trab,
                     "subtotal":sum(i["total"] for i in _conf),
                     "total_st":sum(i.get("st_unit",0.0)*i["quantidade"] for i in _conf)})
-                flash(f"{n_salvos} correção(ões) salva(s) e aprendida(s). Cotação refeita.", "success")
+                flash(f"{n_salvos} item(ns) corrigido(s)/confirmado(s) e aprendido(s). Cotação refeita.", "success")
                 st.rerun()
             else:
-                st.info("Nada para corrigir — a cotação já está como você quer.")
+                st.info("Nenhuma correção nova — os itens marcados como OK foram mantidos.")
 
 
 # ── Rodapé ─────────────────────────────────────────────────────────────────
