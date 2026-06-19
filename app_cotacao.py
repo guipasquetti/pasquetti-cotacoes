@@ -78,6 +78,26 @@ def _checar_senha():
 
 _checar_senha()
 
+# ── Feedback persistente (sobrevive ao st.rerun) ────────────────────────────
+# Para os vendedores acompanharem cada ação: ao salvar/alterar algo seguido de
+# st.rerun(), guardamos a mensagem aqui e ela é exibida no recarregamento.
+def flash(msg, kind="success"):
+    st.session_state["_flash"] = (kind, msg)
+
+def _render_flash():
+    fm = st.session_state.pop("_flash", None)
+    if not fm:
+        return
+    kind, msg = fm
+    icon = {"success":"✅","info":"ℹ️","warning":"⚠️","error":"❌"}.get(kind, "ℹ️")
+    try:
+        st.toast(msg, icon=icon)
+    except Exception:
+        {"success":st.success,"info":st.info,"warning":st.warning,
+         "error":st.error}.get(kind, st.info)(msg)
+
+_render_flash()
+
 # ── Cores da marca ──────────────────────────────────────────────────────────
 NAVY   = "#1B3065"   # azul-marinho Pasquetti
 COPPER = "#C47A3A"   # cobre/laranja Pasquetti
@@ -1158,7 +1178,9 @@ with st.sidebar:
                 _rs = dados_supabase.buscar_clientes(_cn)
                 _r = next((x for x in _rs if x.get("cnpj")==_cn), (_rs[0] if _rs else None))
                 if _r:
-                    _fill_cliente(_r); st.rerun()
+                    _fill_cliente(_r)
+                    flash(f"Cliente “{_r.get('nome','')[:40]}” carregado do cadastro.", "success")
+                    st.rerun()
             elif _sel.startswith("SEFAZ::"):
                 _cn = _sel[7:]
                 with st.spinner("Consultando SEFAZ..."):
@@ -1167,11 +1189,15 @@ with st.sidebar:
                     _fill_cliente({"cnpj":_cn,"nome":_d["nome"],"fantasia":_d.get("fantasia",""),
                                    "endereco":_d["endereco"],"telefone":_d["telefone"],
                                    "email":_d["email"],"uf":_d.get("uf","")})
+                    _salvo = False
                     try:
                         dados_supabase.salvar_cliente(_cn,_d["nome"],_d.get("fantasia",""),_d["endereco"],
                                                       _d["telefone"],_d["email"],_d.get("uf",""))
+                        _salvo = True
                     except Exception:
                         pass
+                    flash(f"Cliente “{_d['nome'][:40]}” encontrado na SEFAZ"
+                          + (" e salvo no cadastro." if _salvo else "."), "success")
                     st.rerun()
                 else:
                     st.error(f"❌ {_e}")
@@ -1193,6 +1219,7 @@ with st.sidebar:
                 st.session_state["input_tel"]=_r.get("telefone","") or ""
                 st.session_state["input_email"]=_r.get("email","") or ""
                 if _r.get("uf"): st.session_state["uf_sel"]=_r["uf"]
+                flash(f"Cliente “{(_r.get('nome','') or '')[:40]}” carregado do cadastro.", "success")
                 st.rerun()
             else:
                 with st.spinner("Consultando SEFAZ..."):
@@ -1202,12 +1229,16 @@ with st.sidebar:
                     st.session_state["input_end"]=_d["endereco"]; st.session_state["input_tel"]=_d["telefone"]
                     st.session_state["input_email"]=_d["email"]
                     if _d.get("uf"): st.session_state["uf_sel"]=_d["uf"]
+                    _salvo = False
                     if dados_supabase and dados_supabase.disponivel():
                         try:
                             dados_supabase.salvar_cliente(_dig,_d["nome"],_d.get("fantasia",""),_d["endereco"],
                                                           _d["telefone"],_d["email"],_d.get("uf",""))
+                            _salvo = True
                         except Exception:
                             pass
+                    flash(f"Cliente “{_d['nome'][:40]}” encontrado na SEFAZ"
+                          + (" e salvo no cadastro." if _salvo else "."), "success")
                     st.rerun()
                 else:
                     st.error(f"❌ {_e}")
@@ -1264,18 +1295,28 @@ with st.sidebar:
                 st.info(f"Parecida com já cadastrada: **{sim}**")
                 _b1, _b2 = st.columns(2)
                 if _b1.button(f"Usar “{sim}”", key="cond_usar", use_container_width=True):
-                    st.session_state["cond_pagamento"] = sim; st.rerun()
+                    st.session_state["cond_pagamento"] = sim
+                    flash(f"Condição de pagamento “{sim}” selecionada.", "info")
+                    st.rerun()
                 if _b2.button("Criar nova", key="cond_criar", use_container_width=True):
+                    _ok = True
                     if dados_supabase and dados_supabase.disponivel():
                         try: dados_supabase.salvar_condicao_pagamento(nova)
-                        except Exception as e: st.error(f"Erro ao salvar: {e}")
-                    st.session_state["cond_pagamento"] = nova; st.rerun()
+                        except Exception as e:
+                            _ok = False; st.error(f"Erro ao salvar: {e}")
+                    st.session_state["cond_pagamento"] = nova
+                    if _ok: flash(f"Condição de pagamento “{nova}” cadastrada e selecionada.", "success")
+                    st.rerun()
             else:
                 if st.button("➕ Cadastrar e usar", key="cond_add", use_container_width=True):
+                    _ok = True
                     if dados_supabase and dados_supabase.disponivel():
                         try: dados_supabase.salvar_condicao_pagamento(nova)
-                        except Exception as e: st.error(f"Erro ao salvar: {e}")
-                    st.session_state["cond_pagamento"] = nova; st.rerun()
+                        except Exception as e:
+                            _ok = False; st.error(f"Erro ao salvar: {e}")
+                    st.session_state["cond_pagamento"] = nova
+                    if _ok: flash(f"Condição de pagamento “{nova}” cadastrada e selecionada.", "success")
+                    st.rerun()
             cond_pagamento = nova
         else:
             cond_pagamento = st.session_state["cond_pagamento"]
@@ -1582,6 +1623,7 @@ if st.session_state.get("cotacao"):
                                           key=f"nt_{num_orcamento}_{j}", use_container_width=True):
                     try:
                         dados_supabase.salvar_nao_trabalhado(n["descricao"], vendedor)
+                        flash(f"“{n['descricao'][:40]}” marcado como não trabalhamos — fora da cotação.", "success")
                     except Exception as e:
                         st.error(f"Erro ao salvar: {e}")
                     st.session_state["cotacao"]["nao"] = [x for k, x in enumerate(nao) if k != j]
@@ -1609,6 +1651,7 @@ if st.session_state.get("cotacao"):
                              key=f"undo_nt_{num_orcamento}_{j}"):
                     try:
                         dados_supabase.remover_nao_trabalhado(n["descricao"])
+                        flash(f"“{n['descricao'][:40]}” voltou a ser cotado normalmente.", "info")
                     except Exception as e:
                         st.error(f"Erro: {e}")
                     st.session_state["cotacao"]["nao_trab"] = [
@@ -1705,7 +1748,7 @@ if st.session_state.get("cotacao"):
                     "conf":_conf,"sug":_sug,"nao":_nao,"nao_trab":_nao_trab,
                     "subtotal":sum(i["total"] for i in _conf),
                     "total_st":sum(i.get("st_unit",0.0)*i["quantidade"] for i in _conf)})
-                st.success(f"✅ {n_salvos} correção(ões) salva(s). Refazendo a cotação...")
+                flash(f"{n_salvos} correção(ões) salva(s) e aprendida(s). Cotação refeita.", "success")
                 st.rerun()
             else:
                 st.info("Nada para corrigir — a cotação já está como você quer.")
