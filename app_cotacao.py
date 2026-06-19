@@ -651,7 +651,7 @@ def processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes=None, nao_traba
     if usar_ia and matcher_ia is not None:
         try:
             hints = [_hint_deterministico(it["descricao"], catalogo) for it in itens_brutos]
-            ia_res = matcher_ia.interpretar_itens(itens_brutos, catalogo, hints=hints)
+            ia_res = matcher_ia.interpretar_itens(itens_brutos, catalogo, hints=hints, correcoes=correcoes)
         except Exception as e:
             st.warning(f"IA indisponível nesta cotação ({e}). Usando apenas o motor determinístico.")
             ia_res = None
