@@ -610,13 +610,15 @@ def _hint_deterministico(descricao, catalogo, n=3):
     return " | ".join(d for _, d in scored[:n])
 
 
-def processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes=None):
+def processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes=None, nao_trabalhados=None):
     """
     Aprendizado (correções salvas) + motor determinístico + (opcional) IA.
-    Prioridade: 1) correção aprendida (exata) → 2) IA → 3) determinístico.
-    Retorna (confirmados, sugestoes, nao_encontrados) no mesmo formato de processar().
+    Prioridade: 0) item marcado como 'não trabalhamos' → 1) correção aprendida
+    (exata) → 2) IA → 3) determinístico.
+    Retorna (confirmados, sugestoes, nao_encontrados, nao_trabalhados).
     """
     correcoes = correcoes or {}
+    nao_trabalhados = nao_trabalhados or set()
     por_desc = {p["descricao"]: p for p in catalogo}  # produto por descrição
 
     # 1) Determinístico para todos (sempre)
@@ -634,9 +636,16 @@ def processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes=None):
             st.warning(f"IA indisponível nesta cotação ({e}). Usando apenas o motor determinístico.")
             ia_res = None
 
-    confirmados, sugestoes, nao = [], [], []
+    confirmados, sugestoes, nao, nao_trab = [], [], [], []
     for i, item in enumerate(itens_brutos):
         qtd = item["quantidade"]
+
+        # 0) Item que NÃO trabalhamos: sai da cotação, não vai para o Excel.
+        if normalizar(item["descricao"]) in nao_trabalhados:
+            nao_trab.append({"descricao": item["descricao"], "quantidade": qtd,
+                             "conf": "NÃO TRABALHAMOS"})
+            continue
+
         d = det[i]
 
         # Resultado determinístico como padrão
@@ -682,54 +691,98 @@ def processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes=None):
             sugestoes.append(base)
         else:
             nao.append(base)
-    return confirmados, sugestoes, nao
+    return confirmados, sugestoes, nao, nao_trab
 
 
 # ════════════════════════════════════════════════════════════════════════════
 # BUSCA CNPJ (BrasilAPI — SEFAZ)
 # ════════════════════════════════════════════════════════════════════════════
 
+def _http_json(url, timeout=8):
+    import urllib.request, ssl
+    ctx = ssl.create_default_context()
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "PasquettiCotacoes/1.0", "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+        return json.loads(r.read().decode())
+
+def _fmt_cnpj_mask(cnpj):
+    return f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}"
+
+def _parse_brasilapi(data, cnpj):
+    tel = (data.get("ddd_telefone_1","") or "").strip()
+    if tel and len(tel) >= 8:
+        tel = f"({tel[:2]}) {tel[2:]}" if len(tel) >= 10 else tel
+    end_parts = [data.get("logradouro",""), data.get("numero",""),
+                 data.get("complemento",""), data.get("bairro",""),
+                 data.get("municipio",""), data.get("uf","")]
+    endereco = " ".join(p for p in end_parts if p and str(p).strip())
+    cep = data.get("cep","")
+    if cep: endereco += f" — CEP: {cep}"
+    return {
+        "nome":      data.get("razao_social",""),
+        "fantasia":  data.get("nome_fantasia",""),
+        "cnpj_fmt":  _fmt_cnpj_mask(cnpj),
+        "endereco":  endereco,
+        "uf":        (data.get("uf","") or "").strip().upper(),
+        "telefone":  tel,
+        "email":     data.get("email",""),
+        "situacao":  data.get("descricao_situacao_cadastral",""),
+        "atividade": data.get("cnae_fiscal_descricao",""),
+    }
+
+def _parse_receitaws(data, cnpj):
+    if str(data.get("status","")).upper() == "ERROR":
+        return None
+    end_parts = [data.get("logradouro",""), data.get("numero",""),
+                 data.get("complemento",""), data.get("bairro",""),
+                 data.get("municipio",""), data.get("uf","")]
+    endereco = " ".join(p for p in end_parts if p and str(p).strip())
+    cep = (data.get("cep","") or "").strip()
+    if cep: endereco += f" — CEP: {cep}"
+    atv = data.get("atividade_principal") or []
+    atividade = atv[0].get("text","") if atv and isinstance(atv[0], dict) else ""
+    return {
+        "nome":      data.get("nome",""),
+        "fantasia":  data.get("fantasia",""),
+        "cnpj_fmt":  _fmt_cnpj_mask(cnpj),
+        "endereco":  endereco,
+        "uf":        (data.get("uf","") or "").strip().upper(),
+        "telefone":  (data.get("telefone","") or "").split("/")[0].strip(),
+        "email":     data.get("email",""),
+        "situacao":  data.get("situacao",""),
+        "atividade": atividade,
+    }
+
 def buscar_cnpj(cnpj_raw: str):
-    """Consulta dados da empresa pelo CNPJ via BrasilAPI (SEFAZ)."""
+    """Consulta dados da empresa pelo CNPJ. Tenta BrasilAPI e, se falhar
+    (ex.: 404 intermitente), cai para a ReceitaWS antes de desistir."""
+    cnpj = re.sub(r'\D', '', cnpj_raw or "")
+    if len(cnpj) != 14:
+        return None, "CNPJ deve ter 14 dígitos."
+    erros = []
+    # 1) BrasilAPI (fonte primária)
     try:
-        import urllib.request, ssl
-        cnpj = re.sub(r'\D', '', cnpj_raw)
-        if len(cnpj) != 14:
-            return None, "CNPJ deve ter 14 dígitos."
-        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
-        ctx = ssl.create_default_context()
-        req = urllib.request.Request(url, headers={"User-Agent": "PasquettiCotacoes/1.0"})
-        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
-            data = json.loads(r.read().decode())
-        tel = data.get("ddd_telefone_1","").strip()
-        if tel and len(tel) >= 8:
-            tel = f"({tel[:2]}) {tel[2:]}" if len(tel) >= 10 else tel
-        end_parts = [
-            data.get("logradouro",""), data.get("numero",""),
-            data.get("complemento",""), data.get("bairro",""),
-            data.get("municipio",""), data.get("uf",""),
-        ]
-        endereco = " ".join(p for p in end_parts if p and p.strip())
-        cep = data.get("cep","")
-        if cep: endereco += f" — CEP: {cep}"
-        return {
-            "nome":         data.get("razao_social",""),
-            "fantasia":     data.get("nome_fantasia",""),
-            "cnpj_fmt":     f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}",
-            "endereco":     endereco,
-            "uf":           (data.get("uf","") or "").strip().upper(),
-            "telefone":     tel,
-            "email":        data.get("email",""),
-            "situacao":     data.get("descricao_situacao_cadastral",""),
-            "atividade":    data.get("cnae_fiscal_descricao",""),
-        }, None
+        data = _http_json(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}", timeout=8)
+        return _parse_brasilapi(data, cnpj), None
     except Exception as e:
-        msg = str(e)
-        if "404" in msg:
-            return None, "CNPJ não encontrado na SEFAZ."
-        if "timeout" in msg.lower() or "urlopen" in msg.lower():
-            return None, "Sem conexão com a internet. Preencha os dados manualmente."
-        return None, f"Erro ao consultar: {msg}"
+        erros.append(f"BrasilAPI: {e}")
+    # 2) ReceitaWS (fallback)
+    try:
+        data = _http_json(f"https://receitaws.com.br/v1/cnpj/{cnpj}", timeout=12)
+        parsed = _parse_receitaws(data, cnpj)
+        if parsed:
+            return parsed, None
+        erros.append("ReceitaWS: CNPJ não encontrado")
+    except Exception as e:
+        erros.append(f"ReceitaWS: {e}")
+    blob = " | ".join(erros)
+    low = blob.lower()
+    if "404" in blob or "não encontrado" in low or "not found" in low:
+        return None, "CNPJ não encontrado nas bases públicas. Confira o número ou preencha manualmente."
+    if "timeout" in low or "urlopen" in low or "getaddrinfo" in low:
+        return None, "Sem conexão para consultar o CNPJ agora. Preencha os dados manualmente."
+    return None, f"Não foi possível consultar agora — preencha manualmente. ({blob[:140]})"
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1399,8 +1452,10 @@ if gerar and itens_brutos:
                else "Buscando correspondências no catálogo (precisão ≥ 80%)..."
     with st.spinner(spin_msg):
         catalogo  = carregar_catalogo(tabela)
-        correcoes = dados_supabase.listar_correcoes(tabela) if (dados_supabase and dados_supabase.disponivel()) else {}
-        conf, sug, nao = processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes)
+        _disp     = bool(dados_supabase and dados_supabase.disponivel())
+        correcoes = dados_supabase.listar_correcoes(tabela) if _disp else {}
+        nao_trab_set = dados_supabase.listar_nao_trabalhados() if _disp else set()
+        conf, sug, nao, nao_trab = processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes, nao_trab_set)
 
     # Aplicar ST por item (alíquota por NCM + UF de destino)
     regras_st = dados_supabase.listar_regras_st() if (dados_supabase and dados_supabase.disponivel()) else {}
@@ -1411,7 +1466,7 @@ if gerar and itens_brutos:
 
     subtotal = sum(i["total"] for i in conf)
     total_st = sum(i.get("st_unit",0.0) * i["quantidade"] for i in conf)
-    st.session_state["cotacao"] = {"conf":conf,"sug":sug,"nao":nao,
+    st.session_state["cotacao"] = {"conf":conf,"sug":sug,"nao":nao,"nao_trab":nao_trab,
         "subtotal":subtotal,"total_st":total_st,"tabela":tabela,"num_orcamento":num_orcamento,
         "itens_brutos":itens_brutos,"usar_ia":usar_ia}
     # Cadastra/atualiza o cliente automaticamente para próximas cotações
@@ -1426,6 +1481,7 @@ if gerar and itens_brutos:
 if st.session_state.get("cotacao"):
     _C = st.session_state["cotacao"]
     conf, sug, nao = _C["conf"], _C["sug"], _C["nao"]
+    nao_trab = _C.get("nao_trab", [])
     subtotal, total_st = _C["subtotal"], _C["total_st"]
     tabela = _C.get("tabela", tabela)
     num_orcamento = _C.get("num_orcamento", num_orcamento)
@@ -1434,11 +1490,12 @@ if st.session_state.get("cotacao"):
     st.markdown("---")
     st.markdown('<span class="pq-section">Resultado da Cotação</span>', unsafe_allow_html=True)
 
-    m1,m2,m3,m4 = st.columns(4)
+    m1,m2,m3,m4,m5 = st.columns(5)
     with m1: st.markdown(f'<div class="pq-metric green"><div class="pq-metric-val green">{len(conf)}</div><div class="pq-metric-lbl">Confirmados (≥80%)</div></div>', unsafe_allow_html=True)
     with m2: st.markdown(f'<div class="pq-metric copper"><div class="pq-metric-val copper">{len(sug)}</div><div class="pq-metric-lbl">Sugestões (60–79%)</div></div>', unsafe_allow_html=True)
     with m3: st.markdown(f'<div class="pq-metric red"><div class="pq-metric-val red">{len(nao)}</div><div class="pq-metric-lbl">Não encontrados</div></div>', unsafe_allow_html=True)
-    with m4: st.markdown(f'<div class="pq-metric"><div class="pq-metric-val">R$ {subtotal:,.2f}</div><div class="pq-metric-lbl">Subtotal (confirmados)</div></div>', unsafe_allow_html=True)
+    with m4: st.markdown(f'<div class="pq-metric"><div class="pq-metric-val">{len(nao_trab)}</div><div class="pq-metric-lbl">Não trabalhamos</div></div>', unsafe_allow_html=True)
+    with m5: st.markdown(f'<div class="pq-metric"><div class="pq-metric-val">R$ {subtotal:,.2f}</div><div class="pq-metric-lbl">Subtotal (confirmados)</div></div>', unsafe_allow_html=True)
 
     # Tabela de confirmados
     if conf:
@@ -1496,13 +1553,54 @@ if st.session_state.get("cotacao"):
           </table>
         </div>""", unsafe_allow_html=True)
 
-    # Não encontrados
+    # Não encontrados (com opção de marcar "não trabalhamos")
     if nao:
-        nao_rows = "".join(f"<li><strong>{n['descricao']}</strong> (qtd: {n['quantidade']:.0f})</li>" for n in nao)
-        st.markdown(f"""<div class="pq-notfound">
-          <div class="pq-notfound-title">❌ Itens não encontrados no catálogo</div>
-          <ul style="margin:6px 0;padding-left:18px;font-size:12px;">{nao_rows}</ul>
+        st.markdown('<div class="pq-notfound"><div class="pq-notfound-title">'
+                    '❌ Itens não encontrados no catálogo</div></div>', unsafe_allow_html=True)
+        _disp_nt = bool(dados_supabase and dados_supabase.disponivel())
+        for j, n in enumerate(nao):
+            c1, c2 = st.columns([4, 2])
+            with c1:
+                st.markdown(f"<div style='padding-top:6px;font-size:13px'>• <strong>{n['descricao']}</strong> "
+                            f"<span style='color:#888'>(qtd: {n['quantidade']:.0f})</span></div>",
+                            unsafe_allow_html=True)
+            with c2:
+                if _disp_nt and st.button("🚫 Não trabalhamos com este item",
+                                          key=f"nt_{num_orcamento}_{j}", use_container_width=True):
+                    try:
+                        dados_supabase.salvar_nao_trabalhado(n["descricao"], vendedor)
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+                    st.session_state["cotacao"]["nao"] = [x for k, x in enumerate(nao) if k != j]
+                    st.session_state["cotacao"]["nao_trab"] = list(nao_trab) + [
+                        {"descricao": n["descricao"], "quantidade": n["quantidade"],
+                         "conf": "NÃO TRABALHAMOS"}]
+                    st.rerun()
+        if _disp_nt:
+            st.caption("Marque os que vocês não fornecem — eles saem da cotação e, "
+                       "nas próximas vezes, já vêm classificados sozinhos.")
+
+    # Itens que não trabalhamos (não entram no Excel enviado ao cliente)
+    if nao_trab:
+        nt_rows = "".join(f"<li><strong>{n['descricao']}</strong> (qtd: {n['quantidade']:.0f})</li>"
+                          for n in nao_trab)
+        st.markdown(f"""<div style="background:#f1f1f4;border:1px solid #d6d6dd;border-radius:10px;
+              padding:12px 16px;margin-top:10px;">
+          <div style="font-weight:700;color:#555;font-size:13px;">🚫 Itens que não trabalhamos — fora da cotação</div>
+          <ul style="margin:6px 0;padding-left:18px;font-size:12px;color:#666;">{nt_rows}</ul>
+          <div style="font-size:11px;color:#999;">Não aparecem no Excel enviado ao cliente.</div>
         </div>""", unsafe_allow_html=True)
+        if dados_supabase and dados_supabase.disponivel():
+            for j, n in enumerate(nao_trab):
+                if st.button(f"↩︎ Desfazer “{n['descricao'][:40]}”",
+                             key=f"undo_nt_{num_orcamento}_{j}"):
+                    try:
+                        dados_supabase.remover_nao_trabalhado(n["descricao"])
+                    except Exception as e:
+                        st.error(f"Erro: {e}")
+                    st.session_state["cotacao"]["nao_trab"] = [
+                        x for k, x in enumerate(nao_trab) if k != j]
+                    st.rerun()
 
     # Download
     st.markdown("---")
@@ -1581,15 +1679,17 @@ if st.session_state.get("cotacao"):
                 _ib = _C.get("itens_brutos", [])
                 _ia = _C.get("usar_ia", False)
                 _cat = carregar_catalogo(tabela)
-                _corr = dados_supabase.listar_correcoes(tabela) if (dados_supabase and dados_supabase.disponivel()) else {}
-                _conf, _sug, _nao = processar_hibrido(_ib, _cat, _ia, _corr)
-                _regras = dados_supabase.listar_regras_st() if (dados_supabase and dados_supabase.disponivel()) else {}
+                _dispr = bool(dados_supabase and dados_supabase.disponivel())
+                _corr = dados_supabase.listar_correcoes(tabela) if _dispr else {}
+                _nt = dados_supabase.listar_nao_trabalhados() if _dispr else set()
+                _conf, _sug, _nao, _nao_trab = processar_hibrido(_ib, _cat, _ia, _corr, _nt)
+                _regras = dados_supabase.listar_regras_st() if _dispr else {}
                 if _regras:
                     for _it in _conf:
                         _aliq = _regras.get((str(_it.get("ncm","")).strip(), str(uf_destino).strip().upper()), 0.0)
                         _it["st_unit"] = round(_it["preco"] * _aliq / 100.0, 4) if _aliq else 0.0
                 st.session_state["cotacao"].update({
-                    "conf":_conf,"sug":_sug,"nao":_nao,
+                    "conf":_conf,"sug":_sug,"nao":_nao,"nao_trab":_nao_trab,
                     "subtotal":sum(i["total"] for i in _conf),
                     "total_st":sum(i.get("st_unit",0.0)*i["quantidade"] for i in _conf)})
                 st.success(f"✅ {n_salvos} correção(ões) salva(s). Refazendo a cotação...")

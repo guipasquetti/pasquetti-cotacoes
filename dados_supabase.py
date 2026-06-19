@@ -113,6 +113,38 @@ def salvar_correcao(texto_cliente, produto_descricao, tabela="", vendedor=""):
     return True
 
 
+# ── Itens que não trabalhamos (não fornecemos) ────────────────────────────────
+
+def listar_nao_trabalhados():
+    """Retorna um set com os texto_norm dos itens marcados como 'não trabalhamos'."""
+    try:
+        rows = _req("GET", "itens_nao_trabalhados", params={"select": "texto_norm"}) or []
+        return {r["texto_norm"] for r in rows if r.get("texto_norm")}
+    except Exception:
+        return set()
+
+def salvar_nao_trabalhado(texto_cliente, vendedor=""):
+    """Marca (idempotente) um item como 'não trabalhamos' para próximas cotações."""
+    norm = normalizar(texto_cliente)
+    if not norm:
+        return False
+    _req("POST", "itens_nao_trabalhados",
+         params={"on_conflict": "texto_norm"},
+         body={"texto_cliente": texto_cliente, "texto_norm": norm, "vendedor": vendedor},
+         extra_headers={"Prefer": "resolution=merge-duplicates,return=minimal"})
+    return True
+
+def remover_nao_trabalhado(texto_cliente):
+    """Desfaz a marcação 'não trabalhamos' de um item."""
+    norm = normalizar(texto_cliente)
+    if not norm:
+        return False
+    _req("DELETE", "itens_nao_trabalhados",
+         params={"texto_norm": f"eq.{norm}"},
+         extra_headers={"Prefer": "return=minimal"})
+    return True
+
+
 # ── Regras de ST (NCM + UF → alíquota %) ──────────────────────────────────────
 
 def listar_regras_st():
