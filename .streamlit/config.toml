@@ -1,3 +1,5 @@
+# Tema aplicado SEMPRE (local e na web). Garante texto escuro sobre fundo claro,
+# inclusive na tabela editável de itens.
 [theme]
 base = "light"
 primaryColor = "#C47A3A"
