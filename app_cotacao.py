@@ -698,6 +698,17 @@ def processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes=None, nao_traba
 # BUSCA CNPJ (BrasilAPI — SEFAZ)
 # ════════════════════════════════════════════════════════════════════════════
 
+def _cnpj_valido(c):
+    """Valida os dígitos verificadores de um CNPJ (14 dígitos)."""
+    if len(c) != 14 or c == c[0] * 14:
+        return False
+    def _dv(nums, pesos):
+        r = sum(int(n) * p for n, p in zip(nums, pesos)) % 11
+        return "0" if r < 2 else str(11 - r)
+    d1 = _dv(c[:12], [5,4,3,2,9,8,7,6,5,4,3,2])
+    d2 = _dv(c[:12] + d1, [6,5,4,3,2,9,8,7,6,5,4,3,2])
+    return c[12] == d1 and c[13] == d2
+
 def _http_json(url, timeout=8):
     import urllib.request, ssl
     ctx = ssl.create_default_context()
@@ -760,6 +771,8 @@ def buscar_cnpj(cnpj_raw: str):
     cnpj = re.sub(r'\D', '', cnpj_raw or "")
     if len(cnpj) != 14:
         return None, "CNPJ deve ter 14 dígitos."
+    if not _cnpj_valido(cnpj):
+        return None, "CNPJ inválido — confira os dígitos digitados."
     erros = []
     # 1) BrasilAPI (fonte primária)
     try:
