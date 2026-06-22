@@ -147,21 +147,104 @@ def remover_nao_trabalhado(texto_cliente):
 
 # ── Regras de ST (NCM + UF → alíquota %) ──────────────────────────────────────
 
+# UFs com alíquota interestadual de 12% saindo de SP (demais = 7%; SP = interna)
+UF_INTER_12 = {"MG", "PR", "RJ", "RS", "SC"}
+
+# Alíquota INTERNA do destino por UF — transcrita dos prints de DIFAL do ERP
+# (22/06/2026). É constante por estado (não varia por NCM). Confirmar c/ contador.
+ALIQUOTA_INTERNA_PADRAO = {
+    "AC": 22.5, "AL": 19.0, "AM": 20.0, "AP": 18.0, "BA": 20.5, "CE": 20.0,
+    "DF": 20.0, "ES": 17.0, "GO": 19.0, "MA": 23.0, "MT": 17.0, "MS": 17.0,
+    "MG": 18.0, "PA": 19.0, "PB": 20.0, "PR": 19.5, "PE": 20.5, "PI": 22.5,
+    "RJ": 20.0, "RN": 20.0, "RO": 19.5, "RR": 20.0, "RS": 17.0, "SC": 17.0,
+    "SP": 18.0, "SE": 20.0, "TO": 20.0,
+}
+
+# FCP (Fundo de Combate à Pobreza) somado ao DIFAL, por UF (dos prints).
+FCP_DIFAL = {"AL": 1.0, "RJ": 2.0}
+
+# Alíquota interestadual usada no DIFAL (valores do ERP): 12% p/ S/SE;
+# MA = 8%, MS = 10% (exceções do ERP); demais 7%. SP = None (interna).
+# Obs.: nas válvulas 8481.* o ES aparece com 4% (bem importado) — não tratado aqui.
+DIFAL_INTER = {
+    "MG": 12.0, "PR": 12.0, "RJ": 12.0, "RS": 12.0, "SC": 12.0,
+    "MA": 8.0, "MS": 10.0,
+}
+
+
+def aliquota_interestadual(uf):
+    """% de ICMS interestadual saindo de SP para a UF (ST). SP -> None."""
+    uf = (uf or "").strip().upper()
+    if uf == "SP":
+        return None
+    return 12.0 if uf in UF_INTER_12 else 7.0
+
+
+def difal_interestadual(uf):
+    """% interestadual usada no DIFAL (inclui exceções MA=8, MS=10). SP -> None."""
+    uf = (uf or "").strip().upper()
+    if uf == "SP":
+        return None
+    return DIFAL_INTER.get(uf, 7.0)
+
+
 def listar_regras_st():
-    """Retorna dict {(ncm, uf): aliquota_float}."""
+    """Retorna dict {(ncm, uf): {cst, mva, icms_interno, aliquota}}."""
     try:
-        rows = _req("GET", "st_regras", params={"select": "ncm,uf,aliquota"}) or []
-        return {(str(r["ncm"]).strip(), str(r["uf"]).strip().upper()): float(r["aliquota"])
-                for r in rows}
+        rows = _req("GET", "st_regras",
+                    params={"select": "ncm,uf,cst,mva,icms_interno,aliquota"}) or []
+        out = {}
+        for r in rows:
+            k = (str(r["ncm"]).strip(), str(r["uf"]).strip().upper())
+            out[k] = {
+                "cst": int(r.get("cst") or 6),
+                "mva": float(r.get("mva") or 0),
+                "icms_interno": float(r.get("icms_interno") or r.get("aliquota") or 0),
+                "aliquota": float(r.get("aliquota") or 0),
+            }
+        return out
     except Exception:
         return {}
 
-def salvar_regra_st(ncm, uf, aliquota, observacao=""):
-    """Insere/atualiza (upsert) a alíquota de ST para um NCM + UF."""
+
+def calcular_st_difal(preco_unit, ncm, uf, regras=None, consumidor_final=False):
+    """ST/DIFAL por unidade. Revenda(contribuinte)->ST; consumidor final->DIFAL.
+    base ST = preco*(1+MVA); ST = base*interno - preco*interestadual.
+    DIFAL = preco*(interno - interestadual)."""
+    uf = (uf or "").strip().upper()
+    if uf == "SP":                          # venda dentro de SP
+        return 0.0
+    if regras is None:
+        regras = listar_regras_st()
+    reg = regras.get((str(ncm).strip(), uf))
+    if consumidor_final:
+        # DIFAL = preco * (interno + FCP - interestadual) / 100
+        interno = ALIQUOTA_INTERNA_PADRAO.get(uf, 0) or (reg or {}).get("icms_interno", 0)
+        if interno <= 0:
+            return 0.0
+        fcp = FCP_DIFAL.get(uf, 0.0)
+        inter_dif = difal_interestadual(uf) or 0.0
+        return round(max(preco_unit * (interno + fcp - inter_dif) / 100.0, 0.0), 4)
+    inter = aliquota_interestadual(uf)
+    # ST (revenda / contribuinte) — só quando há regra com ST (CST 4)
+    if not reg or reg.get("cst") != 4 or reg.get("icms_interno", 0) <= 0:
+        return 0.0
+    mva = reg["mva"]; interno = reg["icms_interno"]
+    base = preco_unit * (1 + mva / 100.0)
+    st = base * (interno / 100.0) - preco_unit * (inter / 100.0)
+    return round(max(st, 0.0), 4)
+
+
+def salvar_regra_st(ncm, uf, aliquota, observacao="", cst=4, mva=0.0, icms_interno=None):
+    """Insere/atualiza (upsert) a regra de ST para um NCM + UF."""
+    if icms_interno is None:
+        icms_interno = aliquota
     _req("POST", "st_regras",
          params={"on_conflict": "ncm,uf"},
          body={"ncm": str(ncm).strip(), "uf": str(uf).strip().upper(),
-               "aliquota": float(aliquota), "observacao": observacao},
+               "aliquota": float(aliquota), "cst": int(cst),
+               "mva": float(mva), "icms_interno": float(icms_interno),
+               "observacao": observacao},
          extra_headers={"Prefer": "resolution=merge-duplicates,return=minimal"})
     return True
 

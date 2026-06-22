@@ -104,7 +104,33 @@ def _catalogo_texto(catalogo):
         linhas.append(f"{i}\t{p['descricao']}\t(R$ {p['preco']:.2f})")
     return "\n".join(linhas)
 
-def interpretar_itens(itens_brutos, catalogo, hints=None):
+def _exemplos_correcoes(correcoes, itens_brutos, limite=60):
+    """Monta um bloco de exemplos 'texto do cliente => produto' a partir das
+    correções já ensinadas, priorizando as mais parecidas com o pedido atual,
+    para a IA aprender o PADRÃO e generalizar (não só decorar o texto exato)."""
+    if not correcoes:
+        return ""
+    def toks(s):
+        return set(re.sub(r"[^\w\s]", " ", str(s).lower()).split())
+    alvo = set()
+    for it in itens_brutos:
+        alvo |= toks(it.get("descricao", ""))
+    pares = list(correcoes.items())  # (texto_norm, produto_descricao)
+    pares.sort(key=lambda p: len((toks(p[0]) | toks(p[1])) & alvo), reverse=True)
+    pares = pares[:limite]
+    if not pares:
+        return ""
+    linhas = "\n".join(f'- "{k}" => "{prod}"' for k, prod in pares)
+    return (
+        "\nEXEMPLOS DE CORREÇÕES JÁ ENSINADAS PELOS VENDEDORES "
+        "(o texto do cliente aparece normalizado: minúsculas, sem acento). "
+        "Aprenda o PADRÃO por trás delas — abreviações, jeitos de escrever, "
+        "equivalências — e generalize para pedidos parecidos, mesmo que o texto "
+        "não seja idêntico:\n"
+        f"{linhas}\n"
+    )
+
+def interpretar_itens(itens_brutos, catalogo, hints=None, correcoes=None):
     """
     Recebe itens brutos [{descricao, quantidade}] e o catálogo (lista de dicts
     com 'descricao' e 'preco'). Retorna lista alinhada por item:
@@ -113,6 +139,8 @@ def interpretar_itens(itens_brutos, catalogo, hints=None):
 
     'hints' (opcional): para cada item, uma string com os melhores candidatos
     do motor determinístico, para ancorar a IA.
+    'correcoes' (opcional): dict {texto_norm: produto} já ensinado pelos
+    vendedores; entra como exemplos no prompt para a IA generalizar padrões.
     """
     if not itens_brutos:
         return []
@@ -127,12 +155,14 @@ def interpretar_itens(itens_brutos, catalogo, hints=None):
         pedidos.append(linha)
     pedidos_txt = "\n".join(pedidos)
 
+    exemplos = _exemplos_correcoes(correcoes, itens_brutos)
+
     system = (
         "Você é um especialista em cotações da Pasquetti, distribuidora de tubos e "
         "conexões de ferro fundido. Sua tarefa: para cada item solicitado por um "
         "cliente (texto frequentemente abreviado, informal ou impreciso), encontrar "
         "o ÚNICO produto correspondente no catálogo fornecido.\n"
-        + GLOSSARIO +
+        + GLOSSARIO + exemplos +
         "\nRegras:\n"
         "- O DIÂMETRO precisa bater. Se o cliente diz 100mm, não escolha 150mm. "
         "Para reduções/tês, os dois números devem bater (ex.: 100x75).\n"

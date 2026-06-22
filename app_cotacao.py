@@ -905,7 +905,8 @@ def bd(e="thin"):
 def bb():
     return Border(bottom=Side(style="thin"))
 
-def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabela_nome, vendedor="", condicao_pagamento="À vista"):
+def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabela_nome, vendedor="", condicao_pagamento="À vista", consumidor_final=False):
+    _imp_lbl = "DIFAL" if consumidor_final else "ICMS ST"
     wb = openpyxl.Workbook()
     ws = wb.active; ws.title = "Orçamento"
     COR_H, COR_L = "1B3065", "E8EEF8"
@@ -998,7 +999,7 @@ def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabe
 
     ROW+=1; ws.row_dimensions[ROW].height = 22
     for j,(h,a) in enumerate(zip(
-        ["Produto","NCM","Quant.","Unit. (R$)","ICMS ST","IPI","Unit. c/ Imp.","Valor Total (R$)"],
+        ["Produto","NCM","Quant.","Unit. (R$)",_imp_lbl,"IPI","Unit. c/ Imp.","Valor Total (R$)"],
         ["left","center","center","right","right","right","right","right"]),2):
         c = ws.cell(row=ROW,column=j,value=h)
         c.font = Font(name="Calibri",bold=True,size=10,color="FFFFFF")
@@ -1042,7 +1043,7 @@ def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabe
     ROW+=1; ws.row_dimensions[ROW].height = 6
     for lbl,val,bold,nf in [("Subtotal:",subtotal_f,False,'#,##0.00'),
                             ("IPI:",ipi_f,False,'#,##0.00'),
-                            ("ICMS ST:",icms_f,False,'#,##0.00'),
+                            (f"{_imp_lbl}:",icms_f,False,'#,##0.00'),
                             ("Total:",total_f,True,'#,##0.00')]:
         ROW+=1; ws.row_dimensions[ROW].height = 18
         ws.merge_cells(f"B{ROW}:H{ROW}"); c = ws[f"B{ROW}"]
@@ -1268,6 +1269,12 @@ with st.sidebar:
     if "uf_sel" not in st.session_state: st.session_state["uf_sel"] = "SP"
     uf_destino = st.selectbox("UF de destino (para ST)", options=_UFS, key="uf_sel",
                               help="Usada para aplicar a alíquota de ST por NCM. Preenchida pela busca de CNPJ.")
+    tipo_cliente = st.selectbox(
+        "Tipo de cliente (ICMS)",
+        options=["Revenda / contribuinte (ST)", "Consumidor final / não-contribuinte (DIFAL)"],
+        key="tipo_cliente",
+        help="Revenda → calcula ICMS-ST (com MVA). Consumidor final → calcula DIFAL (diferencial de alíquota).")
+    consumidor_final = tipo_cliente.startswith("Consumidor")
     tabela = st.selectbox("Tabela de preços", options=["consumo","revenda","pressao","smu","todos"],
         format_func=lambda x: {"consumo":"🏠 Consumo — HL Mar/2026",
                                 "revenda":"🏪 Revenda — HL Mar/2026",
@@ -1511,18 +1518,21 @@ if gerar and itens_brutos:
         nao_trab_set = dados_supabase.listar_nao_trabalhados() if _disp else set()
         conf, sug, nao, nao_trab = processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes, nao_trab_set)
 
-    # Aplicar ST por item (alíquota por NCM + UF de destino)
+    # Aplicar ICMS-ST (revenda) ou DIFAL (consumidor final) por item, por NCM + UF
     regras_st = dados_supabase.listar_regras_st() if (dados_supabase and dados_supabase.disponivel()) else {}
-    if regras_st:
-        for it in conf:
-            aliq = regras_st.get((str(it.get("ncm","")).strip(), str(uf_destino).strip().upper()), 0.0)
-            it["st_unit"] = round(it["preco"] * aliq / 100.0, 4) if aliq else 0.0
+    for it in conf:
+        if dados_supabase:
+            it["st_unit"] = dados_supabase.calcular_st_difal(
+                it["preco"], it.get("ncm", ""), uf_destino,
+                regras=regras_st, consumidor_final=consumidor_final)
+        else:
+            it["st_unit"] = 0.0
 
     subtotal = sum(i["total"] for i in conf)
     total_st = sum(i.get("st_unit",0.0) * i["quantidade"] for i in conf)
     st.session_state["cotacao"] = {"conf":conf,"sug":sug,"nao":nao,"nao_trab":nao_trab,
         "subtotal":subtotal,"total_st":total_st,"tabela":tabela,"num_orcamento":num_orcamento,
-        "itens_brutos":itens_brutos,"usar_ia":usar_ia}
+        "itens_brutos":itens_brutos,"usar_ia":usar_ia,"consumidor_final":consumidor_final}
     # Cadastra/atualiza o cliente automaticamente para próximas cotações
     if dados_supabase and dados_supabase.disponivel() and nome and cnpj_input:
         try:
@@ -1663,7 +1673,7 @@ if st.session_state.get("cotacao"):
     tabelas_nome = {"consumo":"TABELA HL CONSUMO — Março/2026","revenda":"TABELA HL REVENDA — Março/2026",
                     "pressao":"TABELA PRESSÃO JGS — Abril/2026","smu":"TABELA SMU — Fevereiro/2026","todos":"MÚLTIPLAS TABELAS"}
     cliente_dict = {"nome":nome,"cnpj":cnpj_input,"endereco":endereco,"telefone":telefone,"email":email}
-    xlsx_bytes = gerar_xlsx_bytes(conf, sug, nao, num_orcamento, cliente_dict, tabelas_nome[tabela], vendedor, condicao_pagamento=cond_pagamento)
+    xlsx_bytes = gerar_xlsx_bytes(conf, sug, nao, num_orcamento, cliente_dict, tabelas_nome[tabela], vendedor, condicao_pagamento=cond_pagamento, consumidor_final=_C.get("consumidor_final", False))
     nome_arq = f"cotacao_{num_orcamento}_{nome.replace(' ','_')[:18]}.xlsx" if nome else f"cotacao_{num_orcamento}.xlsx"
 
     dcol, icol = st.columns([1,2])
@@ -1672,7 +1682,8 @@ if st.session_state.get("cotacao"):
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True)
     with icol:
-        extra_st = f" · ST: R$ {total_st:,.2f}" if total_st else ""
+        _imp_nome = "DIFAL" if _C.get("consumidor_final", False) else "ST"
+        extra_st = f" · {_imp_nome}: R$ {total_st:,.2f}" if total_st else ""
         st.info(f"📄 Orçamento **Nº {num_orcamento}** · {len(conf)} itens confirmados · R$ {subtotal:,.2f}{extra_st}")
 
     # ── Revisar, marcar OK e corrigir — tabela editável ───────────────────────
@@ -1759,10 +1770,11 @@ if st.session_state.get("cotacao"):
                 _nt = dados_supabase.listar_nao_trabalhados()
                 _conf, _sug, _nao, _nao_trab = processar_hibrido(_ib, _cat, _ia, _corr, _nt)
                 _regras = dados_supabase.listar_regras_st()
-                if _regras:
-                    for _it in _conf:
-                        _aliq = _regras.get((str(_it.get("ncm","")).strip(), str(uf_destino).strip().upper()), 0.0)
-                        _it["st_unit"] = round(_it["preco"] * _aliq / 100.0, 4) if _aliq else 0.0
+                _cf = _C.get("consumidor_final", False)
+                for _it in _conf:
+                    _it["st_unit"] = dados_supabase.calcular_st_difal(
+                        _it["preco"], _it.get("ncm",""), uf_destino,
+                        regras=_regras, consumidor_final=_cf)
                 st.session_state["cotacao"].update({
                     "conf":_conf,"sug":_sug,"nao":_nao,"nao_trab":_nao_trab,
                     "subtotal":sum(i["total"] for i in _conf),
