@@ -1703,6 +1703,7 @@ if gerar and itens_brutos:
     st.session_state["cotacao"] = {"conf":conf,"sug":sug,"nao":nao,"nao_trab":nao_trab,
         "subtotal":subtotal,"total_st":total_st,"tabela":tabela,"num_orcamento":num_orcamento,
         "itens_brutos":itens_brutos,"usar_ia":usar_ia,"consumidor_final":consumidor_final}
+    st.session_state["itens_modificados"] = set()  # zera a marcação de alterados na nova cotação
     # Cadastra/atualiza o cliente automaticamente para próximas cotações
     if dados_supabase and dados_supabase.disponivel() and nome and cnpj_input:
         try:
@@ -1745,6 +1746,7 @@ if st.session_state.get("cotacao"):
     catalogo = carregar_catalogo(tabela)
     por_desc = {p["descricao"]: p for p in catalogo}
     _norm_base = [(p["descricao"], normalizar(p["descricao"])) for p in catalogo]
+    _modificados = st.session_state.setdefault("itens_modificados", set())
     _ordem = {"NÃO ENCONTRADO": 0, "SUGESTÃO": 1, "CONFIRMADO": 2}
     _todos_rev = sorted(conf + sug + nao, key=lambda it: _ordem.get(it.get("conf", ""), 3))
     _icone = {"CONFIRMADO": "✅", "SUGESTÃO": "⚠️", "NÃO ENCONTRADO": "❌"}
@@ -1760,20 +1762,23 @@ if st.session_state.get("cotacao"):
     _PG = 30
     _ntot = len(revisaveis)
     _npag = max(1, (_ntot + _PG - 1) // _PG)
-    _pgkey = f"pg_{num_orcamento}"
-    _pg = min(max(0, st.session_state.get(_pgkey, 0)), _npag - 1)
-    st.session_state[_pgkey] = _pg
-    _ini, _fim = _pg * _PG, min((_pg + 1) * _PG, _ntot)
+    _pgselkey = f"pgsel_{num_orcamento}"
+    # mantém o valor dentro do intervalo válido (evita erro ao mudar de cotação/filtro)
+    if not (1 <= st.session_state.get(_pgselkey, 1) <= _npag):
+        st.session_state[_pgselkey] = 1
     if _npag > 1:
-        pgp, pgi, pgn = fcol2.columns([1, 2, 1])
-        if pgp.button("◀", key=f"pgprev_{num_orcamento}", disabled=(_pg == 0), use_container_width=True):
-            st.session_state[_pgkey] = _pg - 1; st.rerun()
-        pgi.markdown(f"<div style='text-align:center;font-size:12px;padding-top:6px'>pág. {_pg+1}/{_npag}</div>",
-                     unsafe_allow_html=True)
-        if pgn.button("▶", key=f"pgnext_{num_orcamento}", disabled=(_pg >= _npag - 1), use_container_width=True):
-            st.session_state[_pgkey] = _pg + 1; st.rerun()
+        pgp, pgs, pgn = fcol2.columns([1, 2.6, 1])
+        _cur = st.session_state.get(_pgselkey, 1)
+        if pgp.button("◀", key=f"pgprev_{num_orcamento}", disabled=(_cur == 1), use_container_width=True):
+            st.session_state[_pgselkey] = _cur - 1; st.rerun()
+        pgs.selectbox("pg", list(range(1, _npag + 1)), key=_pgselkey, label_visibility="collapsed",
+                      format_func=lambda n: f"Página {n} de {_npag}")
+        if pgn.button("▶", key=f"pgnext_{num_orcamento}", disabled=(_cur == _npag), use_container_width=True):
+            st.session_state[_pgselkey] = _cur + 1; st.rerun()
+    _pg = st.session_state.get(_pgselkey, 1) - 1
+    _ini, _fim = _pg * _PG, min((_pg + 1) * _PG, _ntot)
     st.caption(f"Mostrando {(_ini+1) if _ntot else 0}–{_fim} de {_ntot} itens" +
-               (" · a busca só carrega na linha que você abrir (✏️ trocar)"))
+               " · a busca só carrega na linha que você abrir (✏️ trocar)")
 
     hc = st.columns(_COLS)
     for _c, _t in zip(hc, ["", "Solicitado  →  sugestão", "Produto (✏️ trocar · ➕ novo)", "Qtd",
@@ -1793,7 +1798,13 @@ if st.session_state.get("cotacao"):
         with c1:
             sc = it.get("score")
             sc_txt = f" <span style='color:#999;font-size:10px'>({sc:.0f}%)</span>" if sc else ""
-            st.markdown(f"<div style='font-size:13.5px;padding-top:6px'><strong>{it['descricao']}</strong>{sc_txt}</div>", unsafe_allow_html=True)
+            _foi_mod = normalizar(it["descricao"]) in _modificados
+            _mod_css = ("background:#fff4e6;border-left:3px solid #C47A3A;"
+                        "padding:4px 8px;border-radius:5px;") if _foi_mod else ""
+            _mod_tag = (" <span style='color:#C47A3A;font-size:10px;font-weight:700'>✎ alterado</span>"
+                        if _foi_mod else "")
+            st.markdown(f"<div style='font-size:13.5px;padding-top:6px;{_mod_css}'>"
+                        f"<strong>{it['descricao']}</strong>{sc_txt}{_mod_tag}</div>", unsafe_allow_html=True)
             # Sugestão na MESMA coluna do solicitado (texto puro) — reflete a seleção em tempo real
             _editando = st.session_state.get(f"editar_{num_orcamento}_{idx}")
             _show = (st.session_state.get(f"sug_{num_orcamento}_{idx}") or atual) if _editando else atual
@@ -1858,6 +1869,7 @@ if st.session_state.get("cotacao"):
                                 x for x in st.session_state["cotacao"][_kk] if x is not it]
                         st.session_state["cotacao"]["conf"].append(it)
                         st.session_state[f"sug_{num_orcamento}_{idx}"] = _new
+                        _modificados.add(normalizar(it["descricao"]))
                     st.session_state[_editk] = False
                     st.rerun()
             else:
@@ -1947,6 +1959,7 @@ if st.session_state.get("cotacao"):
                     try:
                         dados_supabase.salvar_correcao(it["descricao"], _final, tabela, vendedor)
                         st.session_state[_savekey] = _final
+                        _modificados.add(normalizar(it["descricao"]))
                         flash(f"✔ Salvo automaticamente: “{it['descricao'][:22]}” → {_final[:26]}", "success")
                     except Exception:
                         pass
@@ -1970,6 +1983,7 @@ if st.session_state.get("cotacao"):
                         dados_supabase.salvar_correcao(it["descricao"], _nd, tabela, vendedor)
                         carregar_catalogo.clear()
                         st.session_state[f"novo_{num_orcamento}_{idx}"] = False
+                        _modificados.add(normalizar(it["descricao"]))
                         _reprocessar_cotacao(uf_destino)
                         flash(f"Produto “{_nd[:40]}” cadastrado, vinculado e incluído na cotação.", "success")
                         st.rerun()
