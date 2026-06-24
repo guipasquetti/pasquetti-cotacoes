@@ -220,18 +220,26 @@ def main():
     fontes = [
         ("HL CONSUMO", parse_hl_table, ("CONSUMO",), "HL_CONSUMO"),
         ("HL REVENDA", parse_hl_table, ("REVENDA",), "HL_REVENDA"),
-        ("PRESSÃO JGS", parse_pressao_table, ("PRESS",), None),
+        # Pressão JGS agora vem da BASE IA completa (NCM + SAP + preço de venda).
+        # Procura "tabela base IA *.xlsx"; se não achar, cai na tabela PRESS antiga.
+        ("PRESSÃO JGS (base IA)", "BASE_IA", ("BASE", "IA"), "PRESSAO_JGS"),
         ("SMU", parse_hl_table, ("SMU",), "SMU"),
     ]
 
     for label, func, palavras, tipo in fontes:
         caminho = _achar(*palavras)
+        if not caminho and func == "BASE_IA":
+            caminho = _achar("PRESS")  # fallback p/ a tabela de pressão antiga
+            func = parse_pressao_table
         if not caminho:
             avisos.append(f"⚠️ Arquivo de {label} não encontrado na pasta.")
             print(f"⚠️  {label}: arquivo não encontrado (procurei por {palavras}).")
             continue
         print(f"Processando {label}: {os.path.basename(caminho)}")
-        if func is parse_hl_table:
+        if func == "BASE_IA":
+            from extrair_base_ia import converter
+            p = converter(caminho)
+        elif func is parse_hl_table:
             p, _ = parse_hl_table(caminho, tipo)
         else:
             p, familias = parse_pressao_table(caminho)

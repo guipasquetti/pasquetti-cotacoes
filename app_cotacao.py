@@ -615,6 +615,34 @@ def penalidade_diferenciador(qexp, d):
         pen -= 35  # água x esgoto = produto totalmente diferente
     return pen
 
+# ── Ancoramento de TIPO ──────────────────────────────────────────────────────
+# Tipo canônico pelo 1º termo (já EXPANDIDO, então abreviações como JF→joelho,
+# valvula→valv já estão resolvidas). Penaliza forte quando o tipo diverge
+# (tubo ≠ tê ≠ curva ≠ redução…), evitando casar produto de outra família.
+_TIPO_CANON = {
+    "tubo": "tubo", "tubint": "tubo",
+    "tee": "te", "te": "te",
+    "joelho": "curva", "curva": "curva",
+    "reducao": "reducao", "red": "reducao",
+    "valv": "valvula", "valvula": "valvula", "registro": "valvula",
+    "cruzeta": "cruzeta", "cruz": "cruzeta",
+    "juncao": "juncao", "junc": "juncao",
+    "luva": "luva", "toco": "toco", "carretel": "carretel",
+    "extremidade": "extremidade", "flange": "flange", "adaptador": "adaptador",
+    "arruela": "arruela", "colar": "colar", "anel": "anel", "tampao": "tampao",
+    "hidrante": "hidrante", "ventosa": "ventosa", "bucha": "bucha",
+    "grelha": "grelha", "ralo": "ralo",
+}
+
+def tipo_de(texto_exp):
+    """Tipo canônico do 1º termo conhecido; None se o 1º termo não for um tipo."""
+    for tok in (texto_exp or "").split():
+        if tok in _TIPO_CANON:
+            return _TIPO_CANON[tok]
+        if tok.isalpha():
+            return None
+    return None
+
 def score_ts(a, b):
     ta = " ".join(sorted(a.split()))
     tb = " ".join(sorted(b.split()))
@@ -639,7 +667,9 @@ def buscar(descricao, catalogo):
     """
     qo = normalizar(descricao)
     qe = expandir(descricao)
-    best_prod, best_score = None, 0.0
+    qt = tipo_de(qe)
+    _qtok = set(qe.split())
+    best_prod, best_score, best_ov = None, 0.0, -1
 
     for p in catalogo:
         d = p["_norm"]
@@ -658,10 +688,24 @@ def buscar(descricao, catalogo):
             s += 18 if dq & dp else -28
         # Penalidade por diferenciadores fortes (K7/K9, ponta/bolsa, PN, SMU/SME, água/esg)
         s += penalidade_diferenciador(qe, d)
+        # Ancoramento de tipo: penaliza forte produto de outra família
+        pt = p.get("_tipo")
+        if qt and pt and qt != pt:
+            s -= 45
+        # Reforço quando a classe exata bate (ex.: cliente pede K9 e o produto é K9)
+        for _kc in ("k7", "k9"):
+            if _kc in qe and _kc in d:
+                s += 14
         s = min(100, max(0, s))
+        # "cilíndrico" é forma especial (após o teto): só casa se pedido explicitamente
+        if "cilindrico" in d and "cilindrico" not in qe:
+            s -= 15
 
-        if s > best_score:
-            best_score, best_prod = s, p
+        # Desempate: em scores iguais (ex.: teto 100), prefere maior sobreposição
+        # de termos (faz "água" decidir entre cilíndrico e ponta-bolsa, etc.)
+        ov = len(_qtok & set(d.split()))
+        if s > best_score or (s == best_score and ov > best_ov):
+            best_score, best_prod, best_ov = s, p, ov
 
     if best_score >= 80:
         return best_prod, best_score, "CONFIRMADO"
@@ -1015,7 +1059,9 @@ def carregar_catalogo(tabela):
             catalogo = catalogo + dados_supabase.listar_produtos_manuais()
         except Exception:
             pass
-    for p in catalogo: p["_norm"] = expandir(p["descricao"])
+    for p in catalogo:
+        p["_norm"] = expandir(p["descricao"])
+        p["_tipo"] = tipo_de(p["_norm"])
     return catalogo
 
 
