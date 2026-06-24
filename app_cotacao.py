@@ -1752,12 +1752,31 @@ if st.session_state.get("cotacao"):
     _icone = {"CONFIRMADO": "✅", "SUGESTÃO": "⚠️", "NÃO ENCONTRADO": "❌"}
     _COLS = [0.4, 2.6, 3.6, 0.6, 0.7, 1.05, 1.15, 0.65, 0.5]
 
-    # Filtro + paginação — evita renderizar centenas de linhas por rerun (deixa a busca rápida)
-    _n_pend = sum(1 for x in _todos_rev if x.get("conf") != "CONFIRMADO")
+    # Filtro por status (múltipla seleção) + paginação — também deixa a busca mais rápida
+    _OPC = ["❌ Não encontrado", "⚠️ Sugestão", "✅ Confirmado", "✎ Modificado"]
+    _cnt = {"NÃO ENCONTRADO": 0, "SUGESTÃO": 0, "CONFIRMADO": 0}
+    for x in _todos_rev:
+        _cnt[x.get("conf", "")] = _cnt.get(x.get("conf", ""), 0) + 1
+    _cnt_mod = sum(1 for x in _todos_rev if normalizar(x["descricao"]) in _modificados)
     fcol1, fcol2 = st.columns([3, 2])
-    _so_pend = fcol1.checkbox(f"Mostrar só pendências (❌/⚠️) — {_n_pend} item(ns)",
-                              key=f"sopend_{num_orcamento}", value=False)
-    revisaveis = [x for x in _todos_rev if x.get("conf") != "CONFIRMADO"] if _so_pend else _todos_rev
+    _filtros = fcol1.multiselect(
+        "Filtrar por status", _OPC, default=_OPC, key=f"filtro_{num_orcamento}",
+        label_visibility="collapsed",
+        placeholder="Filtrar por status (selecione um ou mais)")
+
+    def _passa(it):
+        if not _filtros:               # nada marcado = mostra tudo
+            return True
+        c = it.get("conf", "")
+        if _OPC[0] in _filtros and c == "NÃO ENCONTRADO": return True
+        if _OPC[1] in _filtros and c == "SUGESTÃO":       return True
+        if _OPC[2] in _filtros and c == "CONFIRMADO":     return True
+        if _OPC[3] in _filtros and normalizar(it["descricao"]) in _modificados: return True
+        return False
+
+    revisaveis = [x for x in _todos_rev if _passa(x)]
+    fcol1.caption(f"❌ {_cnt.get('NÃO ENCONTRADO',0)} · ⚠️ {_cnt.get('SUGESTÃO',0)} · "
+                  f"✅ {_cnt.get('CONFIRMADO',0)} · ✎ {_cnt_mod} alterados")
 
     _PG = 30
     _ntot = len(revisaveis)
