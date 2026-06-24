@@ -1717,9 +1717,34 @@ if st.session_state.get("cotacao"):
     por_desc = {p["descricao"]: p for p in catalogo}
     _norm_base = [(p["descricao"], normalizar(p["descricao"])) for p in catalogo]
     _ordem = {"NÃO ENCONTRADO": 0, "SUGESTÃO": 1, "CONFIRMADO": 2}
-    revisaveis = sorted(conf + sug + nao, key=lambda it: _ordem.get(it.get("conf", ""), 3))
+    _todos_rev = sorted(conf + sug + nao, key=lambda it: _ordem.get(it.get("conf", ""), 3))
     _icone = {"CONFIRMADO": "✅", "SUGESTÃO": "⚠️", "NÃO ENCONTRADO": "❌"}
     _COLS = [0.4, 2.6, 3.6, 0.6, 0.7, 1.05, 1.15, 0.65, 0.5]
+
+    # Filtro + paginação — evita renderizar centenas de linhas por rerun (deixa a busca rápida)
+    _n_pend = sum(1 for x in _todos_rev if x.get("conf") != "CONFIRMADO")
+    fcol1, fcol2 = st.columns([3, 2])
+    _so_pend = fcol1.checkbox(f"Mostrar só pendências (❌/⚠️) — {_n_pend} item(ns)",
+                              key=f"sopend_{num_orcamento}", value=False)
+    revisaveis = [x for x in _todos_rev if x.get("conf") != "CONFIRMADO"] if _so_pend else _todos_rev
+
+    _PG = 30
+    _ntot = len(revisaveis)
+    _npag = max(1, (_ntot + _PG - 1) // _PG)
+    _pgkey = f"pg_{num_orcamento}"
+    _pg = min(max(0, st.session_state.get(_pgkey, 0)), _npag - 1)
+    st.session_state[_pgkey] = _pg
+    _ini, _fim = _pg * _PG, min((_pg + 1) * _PG, _ntot)
+    if _npag > 1:
+        pgp, pgi, pgn = fcol2.columns([1, 2, 1])
+        if pgp.button("◀", key=f"pgprev_{num_orcamento}", disabled=(_pg == 0), use_container_width=True):
+            st.session_state[_pgkey] = _pg - 1; st.rerun()
+        pgi.markdown(f"<div style='text-align:center;font-size:12px;padding-top:6px'>pág. {_pg+1}/{_npag}</div>",
+                     unsafe_allow_html=True)
+        if pgn.button("▶", key=f"pgnext_{num_orcamento}", disabled=(_pg >= _npag - 1), use_container_width=True):
+            st.session_state[_pgkey] = _pg + 1; st.rerun()
+    st.caption(f"Mostrando {(_ini+1) if _ntot else 0}–{_fim} de {_ntot} itens" +
+               (" · a busca só carrega na linha que você abrir (✏️ trocar)"))
 
     hc = st.columns(_COLS)
     for _c, _t in zip(hc, ["", "Solicitado  →  sugestão", "Produto (✏️ trocar · ➕ novo)", "Qtd",
@@ -1728,7 +1753,8 @@ if st.session_state.get("cotacao"):
 
     escolhas = {}
     subtotal_prev = 0.0
-    for idx, it in enumerate(revisaveis):
+    for idx in range(_ini, _fim):
+        it = revisaveis[idx]
         atual = it.get("produto", "")
         conf_it = it.get("conf", "")
         ic = _icone.get(conf_it, "")
@@ -1770,6 +1796,10 @@ if st.session_state.get("cotacao"):
                         matches = [atual] if atual else []
                     _opc = ([atual] if atual else ["— manter —"]) + [m for m in matches if m != atual]
                     escolha = st.selectbox("p", _opc, key=f"selc_{num_orcamento}_{idx}", label_visibility="collapsed")
+                # Fechar a busca e voltar aos botões (✏️ trocar · ➕ novo)
+                if st.button("✓ concluir", key=f"btnok_{num_orcamento}_{idx}", use_container_width=True):
+                    st.session_state[_editk] = False
+                    st.rerun()
             else:
                 escolha = atual or "— manter —"
                 _b1, _b2 = st.columns(2)
@@ -1842,6 +1872,23 @@ if st.session_state.get("cotacao"):
         if ok_val and total:
             subtotal_prev += total
 
+        # Auto-salvar a correção assim que muda/confirma (não espera o botão).
+        # Se a sessão cair, basta re-subir a mesma lista que tudo volta aprendido.
+        if _disp_corr:
+            _orig  = it.get("produto", "")
+            _final = escolha if (escolha and escolha != "— manter —") else _orig
+            _muda     = bool(_final) and _final in por_desc and _final != _orig
+            _confirma = ok_val and conf_it != "CONFIRMADO" and _final in por_desc
+            if _muda or _confirma:
+                _savekey = f"saved_{num_orcamento}_{idx}"
+                if st.session_state.get(_savekey) != _final:
+                    try:
+                        dados_supabase.salvar_correcao(it["descricao"], _final, tabela, vendedor)
+                        st.session_state[_savekey] = _final
+                        flash(f"✔ Salvo automaticamente: “{it['descricao'][:22]}” → {_final[:26]}", "success")
+                    except Exception:
+                        pass
+
         # Formulário "cadastrar produto novo" (abre abaixo da linha ao clicar "➕ novo")
         if st.session_state.get(f"novo_{num_orcamento}_{idx}"):
             with st.container():
@@ -1867,8 +1914,9 @@ if st.session_state.get("cotacao"):
                     else:
                         st.warning("Informe a descrição e um preço maior que zero.")
 
+    _sub_conf_tot = sum(i.get("total", 0.0) for i in conf)
     st.markdown(f"<p style='text-align:right;font-weight:700;font-size:15px;color:{NAVY};margin-top:8px;'>"
-                f"Subtotal (itens ✔): R$ {subtotal_prev:,.2f}</p>", unsafe_allow_html=True)
+                f"Subtotal (itens confirmados): R$ {_sub_conf_tot:,.2f}</p>", unsafe_allow_html=True)
     st.caption("\\* preço convertido pela unidade escolhida (UN ↔ M) usando o comprimento da barra: "
                "JGS 6 m · SMU/SME 3 m. Default é UN; troque para M só quando o cliente pedir em metros.")
 
