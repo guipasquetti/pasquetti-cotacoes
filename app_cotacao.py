@@ -845,24 +845,61 @@ def parse_texto(texto):
         if desc and desc.lower() not in ("none","nan"): itens.append({"descricao": desc, "quantidade": qtd})
     return itens
 
-def parse_xlsx_bytes(data):
-    wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
-    ws = wb.active
-    header_row = col_desc = col_qtd = None
-    for i, row in enumerate(ws.iter_rows(max_row=10, values_only=True), 1):
-        row_s = [str(c).lower().strip() if c else "" for c in row]
+def _abrir_workbook(data):
+    """Abre .xlsx com openpyxl; se for .xls antigo, tenta via pandas/xlrd.
+    Levanta ValueError com mensagem amigável se não der."""
+    try:
+        return openpyxl.load_workbook(io.BytesIO(data), data_only=True).active, None
+    except Exception as e_openpyxl:
+        # Fallback p/ .xls (formato binário antigo) usando pandas
+        try:
+            import pandas as pd
+            df = pd.read_excel(io.BytesIO(data), header=None)
+            return ("__df__", df)
+        except Exception:
+            raise ValueError(
+                "Não consegui abrir a planilha. Se for um arquivo .xls antigo, "
+                "abra no Excel e salve como .xlsx (Excel Workbook) e tente de novo. "
+                f"(detalhe técnico: {e_openpyxl})")
+
+def _detectar_colunas(linhas):
+    """Recebe lista de listas (primeiras linhas) e devolve (col_desc, col_qtd, header_row).
+    Prioriza a linha que tem descrição E quantidade (cabeçalho real); só então
+    aceita uma linha com apenas descrição."""
+    so_desc = None
+    for i, row in enumerate(linhas[:15], 1):
+        row_s = [str(c).lower().strip() if c is not None else "" for c in row]
+        cd = cq = None
         for j, cell in enumerate(row_s):
-            if any(k in cell for k in ["produto","descri","item","material","especif"]):
-                col_desc = j; header_row = i
-            if any(k in cell for k in ["qtd","quant","qt ","pcs","unid"]):
-                col_qtd = j
-        if header_row: break
-    if not header_row: col_desc, col_qtd, header_row = 0, 1, 1
+            if any(k in cell for k in ["produto","descri","item","material","especif","peça","peca"]):
+                cd = j
+            if any(k in cell for k in ["qtd","quant","qt ","pcs","unid","qnt"]):
+                cq = j
+        if cd is not None and cq is not None:
+            return cd, cq, i  # cabeçalho completo: melhor escolha
+        if cd is not None and so_desc is None:
+            so_desc = (cd, cd + 1, i)  # guarda como plano B
+    if so_desc is not None:
+        return so_desc
+    return 0, 1, 0  # sem cabeçalho reconhecido: col A=descrição, B=qtd, sem linha p/ pular
+
+def parse_xlsx_bytes(data):
+    ws, df = _abrir_workbook(data)
+    # Caminho pandas (.xls)
+    if ws == "__df__":
+        linhas = df.values.tolist()
+        col_desc, col_qtd, header_row = _detectar_colunas(linhas)
+        corpo = linhas[header_row:]
+    else:
+        todas = list(ws.iter_rows(values_only=True))
+        col_desc, col_qtd, header_row = _detectar_colunas(todas)
+        corpo = todas[header_row:]
     itens = []
-    for row in ws.iter_rows(min_row=header_row+1, values_only=True):
-        desc = str(row[col_desc]).strip() if col_desc is not None and col_desc < len(row) and row[col_desc] else ""
-        try: qtd = float(row[col_qtd]) if col_qtd is not None and col_qtd < len(row) and row[col_qtd] else 1
-        except: qtd = 1
+    for row in corpo:
+        row = list(row)
+        desc = str(row[col_desc]).strip() if col_desc < len(row) and row[col_desc] is not None else ""
+        try: qtd = float(row[col_qtd]) if col_qtd < len(row) and row[col_qtd] not in (None,"") else 1
+        except (ValueError, TypeError): qtd = 1
         if desc and desc.lower() not in ("none","nan",""):
             itens.append({"descricao": desc, "quantidade": qtd})
     return itens
@@ -1207,8 +1244,9 @@ with st.sidebar:
             st.caption(f"📋 CNPJ: **{cnpj_input}**")
     else:
         # Modo simples (sem o componente de busca): o PRÓPRIO campo CNPJ faz a busca base/SEFAZ
-        cnpj_input = st.text_input("CNPJ", key="input_cnpj", placeholder="00.000.000/0001-00",
-                                   help="Digite o CNPJ e clique em Buscar — procura na base e, se não achar, na SEFAZ.")
+        cnpj_input = st.text_input("CNPJ (opcional)", key="input_cnpj", placeholder="00.000.000/0001-00",
+                                   help="Opcional. Digite o CNPJ e clique em Buscar — procura na base e, se não achar, na SEFAZ. "
+                                        "A cotação pode ser gerada sem CNPJ.")
         if st.button("🔎 Buscar cliente (base / SEFAZ)", use_container_width=True) and cnpj_input.strip():
             _rs = dados_supabase.buscar_clientes(cnpj_input) if (dados_supabase and dados_supabase.disponivel()) else []
             _dig = "".join(ch for ch in cnpj_input if ch.isdigit())
@@ -1243,7 +1281,7 @@ with st.sidebar:
                     st.rerun()
                 else:
                     st.error(f"❌ {_e}")
-    nome     = st.text_input("Nome / Razão Social", placeholder="Construtora ABC Ltda", key="input_nome")
+    nome     = st.text_input("Nome / Razão Social (opcional)", placeholder="Construtora ABC Ltda", key="input_nome")
     fantasia = st.text_input("Nome Fantasia", placeholder="(opcional)", key="input_fantasia")
     endereco = st.text_input("Endereço", placeholder="Rua X, 123 - Bairro - Cidade", key="input_end")
     telefone = st.text_input("Telefone", placeholder="(11) 9999-9999", key="input_tel")
@@ -1415,8 +1453,18 @@ with tab1:
             itens_brutos = parse_texto(data.decode("utf-8", errors="ignore"))
             st.success(f"✅ **{len(itens_brutos)} itens** lidos do arquivo de texto")
         elif ext in (".xlsx",".xls"):
-            itens_brutos = parse_xlsx_bytes(data)
-            st.success(f"✅ **{len(itens_brutos)} itens** lidos da planilha")
+            try:
+                itens_brutos = parse_xlsx_bytes(data)
+            except ValueError as e:
+                st.error(f"❌ {e}"); itens_brutos = []
+            except Exception as e:
+                st.error(f"❌ Erro ao ler a planilha: {e}"); itens_brutos = []
+            if itens_brutos:
+                st.success(f"✅ **{len(itens_brutos)} itens** lidos da planilha")
+            elif data:
+                st.warning("Li a planilha mas não encontrei itens. Confira se há uma coluna de "
+                           "**Produto/Descrição** (e, opcional, **Quantidade**) com dados preenchidos. "
+                           "Se as células forem fórmulas, abra e salve a planilha no Excel antes de enviar.")
         elif ext == ".pdf":
             if ia_ok:
                 with st.spinner("Lendo o PDF com a IA..."):
@@ -1504,7 +1552,8 @@ with col_hint:
     if not itens_brutos:
         st.info("Insira os itens em uma das abas acima.")
     elif not nome:
-        st.warning("💡 Preencha o nome do cliente no menu lateral para identificar a cotação.")
+        st.info("💡 Cliente não preenchido — a cotação será gerada normalmente para conferência. "
+                "Preencher nome/CNPJ é opcional.")
 
 
 # ── Resultado ──────────────────────────────────────────────────────────────
