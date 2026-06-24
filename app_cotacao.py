@@ -553,6 +553,39 @@ def bonus_tipo(query_exp, cat_desc):
                 return 12
     return 0
 
+# ── Diferenciadores fortes ──────────────────────────────────────────────────
+# Variantes que mudam o produto mas pesam pouco no texto (K7 vs K9, ponta/bolsa,
+# PN, linha SMU/SME). Penaliza SÓ quando query E produto especificam e DIVERGEM —
+# se a descrição do cliente não traz o marcador, não penaliza. Isso evita que um
+# item "parecido" seja confirmado com 100% sendo a variante errada.
+_DIFERENCIADORES = [
+    ("classe",  r'\bk\s*-?\s*(7|9)\b',                  30),  # K7 vs K9 (JGS)
+    ("conexao", r'\b(p/p|p/b|b/b|b/fl|c/fl|p/fl)\b',    30),  # ponta/bolsa/flange
+    ("pn",      r'\bpn\s*-?\s*(\d{1,2})\b',             25),  # classe de pressão
+    ("linha",   r'\b(smu|sme)\b',                       22),  # linha SMU vs SME
+]
+
+def _variante(regex, texto):
+    m = re.search(regex, texto, flags=re.IGNORECASE)
+    return m.group(1).lower().replace(" ", "").replace("-", "") if m else None
+
+def _fluido(t):
+    if re.search(r'\besg\w*\b', t): return "esg"
+    if re.search(r'\bagua\b', t):   return "agua"
+    return None
+
+def penalidade_diferenciador(qexp, d):
+    """Soma de penalidades (<= 0) quando especificadores fortes divergem."""
+    pen = 0
+    for _nome, rgx, peso in _DIFERENCIADORES:
+        vq, vd = _variante(rgx, qexp), _variante(rgx, d)
+        if vq and vd and vq != vd:
+            pen -= peso
+    fq, fd = _fluido(qexp), _fluido(d)
+    if fq and fd and fq != fd:
+        pen -= 35  # água x esgoto = produto totalmente diferente
+    return pen
+
 def score_ts(a, b):
     ta = " ".join(sorted(a.split()))
     tb = " ".join(sorted(b.split()))
@@ -594,6 +627,8 @@ def buscar(descricao, catalogo):
         dq, dp = extrair_diametros(qe), extrair_diametros(d)
         if dq and dp:
             s += 18 if dq & dp else -28
+        # Penalidade por diferenciadores fortes (K7/K9, ponta/bolsa, PN, SMU/SME, água/esg)
+        s += penalidade_diferenciador(qe, d)
         s = min(100, max(0, s))
 
         if s > best_score:
@@ -1654,7 +1689,7 @@ if st.session_state.get("cotacao"):
     _COLS = [0.4, 2.6, 3.6, 0.6, 0.7, 1.05, 1.15, 0.65, 0.5]
 
     hc = st.columns(_COLS)
-    for _c, _t in zip(hc, ["", "Solicitado", "Produto sugerido — confirme ou troque", "Qtd",
+    for _c, _t in zip(hc, ["", "Solicitado  →  sugestão", "Trocar produto (busca)", "Qtd",
                            "Un.", "Preço Un.", "Total", "Certo?", ""]):
         _c.markdown(f"<div style='font-weight:700;color:{NAVY};font-size:12px'>{_t}</div>", unsafe_allow_html=True)
 
@@ -1671,6 +1706,13 @@ if st.session_state.get("cotacao"):
             sc = it.get("score")
             sc_txt = f" <span style='color:#999;font-size:10px'>({sc:.0f}%)</span>" if sc else ""
             st.markdown(f"<div style='font-size:12px;padding-top:6px'><strong>{it['descricao']}</strong>{sc_txt}</div>", unsafe_allow_html=True)
+            # Sugestão na MESMA coluna do solicitado (texto puro) — garante alinhamento por linha
+            if atual and atual in por_desc:
+                st.markdown(f"<div style='font-size:11px;color:#1f7a3d'>→ <strong>{atual}</strong></div>",
+                            unsafe_allow_html=True)
+            else:
+                st.markdown("<div style='font-size:11px;color:#b00000'>→ sem correspondência no catálogo</div>",
+                            unsafe_allow_html=True)
         with c2:
             if st_searchbox is not None:
                 def _busca(q, _base=_norm_base, _atual=atual):
@@ -1692,14 +1734,6 @@ if st.session_state.get("cotacao"):
                 _opc = ([atual] if atual else ["— manter —"]) + [m for m in matches if m != atual]
                 escolha = st.selectbox("p", _opc, key=f"selc_{num_orcamento}_{idx}", label_visibility="collapsed")
             escolhas[idx] = escolha
-            # Sugestão/escolha sempre visível em texto, p/ conferir de relance
-            _prodtxt = escolha if (escolha and escolha != "— manter —") else (atual or "")
-            if _prodtxt and _prodtxt in por_desc:
-                st.markdown(f"<div style='font-size:11px;color:#1f7a3d;padding-top:2px'>✓ <strong>{_prodtxt}</strong></div>",
-                            unsafe_allow_html=True)
-            else:
-                st.markdown("<div style='font-size:11px;color:#b00000;padding-top:2px'>— sem correspondência no catálogo —</div>",
-                            unsafe_allow_html=True)
         prod_sel = por_desc.get(escolha)
         qtd = it["quantidade"]
         _txt_prod = (str(prod_sel.get("categoria", "")) + " " + str(prod_sel.get("descricao", ""))).upper() if prod_sel else ""
