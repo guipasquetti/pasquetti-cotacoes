@@ -365,7 +365,9 @@ def salvar_cliente(cnpj, nome, fantasia="", endereco="", telefone="", email="", 
     if not dig or not (nome or "").strip():
         return False
     _req("POST", "clientes", params={"on_conflict": "cnpj"},
-         body={"cnpj": dig, "nome": nome, "fantasia": fantasia, "endereco": endereco,
-               "telefone": telefone, "email": email, "uf": uf},
+         body={"cnpj": dig, "nome": (nome or "").strip(),
+               "fantasia": (fantasia or "").strip(), "endereco": (endereco or "").strip(),
+               "telefone": (telefone or "").strip(), "email": (email or "").strip(),
+               "uf": (uf or "").strip()},
          extra_headers={"Prefer": "resolution=merge-duplicates,return=minimal"})
     return True

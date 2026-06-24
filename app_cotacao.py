@@ -1765,9 +1765,13 @@ if st.session_state.get("cotacao"):
             sc = it.get("score")
             sc_txt = f" <span style='color:#999;font-size:10px'>({sc:.0f}%)</span>" if sc else ""
             st.markdown(f"<div style='font-size:12px;padding-top:6px'><strong>{it['descricao']}</strong>{sc_txt}</div>", unsafe_allow_html=True)
-            # Sugestão na MESMA coluna do solicitado (texto puro) — garante alinhamento por linha
-            if atual and atual in por_desc:
-                st.markdown(f"<div style='font-size:11px;color:#1f7a3d'>→ <strong>{atual}</strong></div>",
+            # Sugestão na MESMA coluna do solicitado (texto puro) — reflete a seleção em tempo real
+            _editando = st.session_state.get(f"editar_{num_orcamento}_{idx}")
+            _show = (st.session_state.get(f"sug_{num_orcamento}_{idx}") or atual) if _editando else atual
+            if _show == "— manter —":
+                _show = atual
+            if _show and _show in por_desc:
+                st.markdown(f"<div style='font-size:11px;color:#1f7a3d'>→ <strong>{_show}</strong></div>",
                             unsafe_allow_html=True)
             else:
                 st.markdown("<div style='font-size:11px;color:#b00000'>→ sem correspondência no catálogo</div>",
@@ -1796,8 +1800,35 @@ if st.session_state.get("cotacao"):
                         matches = [atual] if atual else []
                     _opc = ([atual] if atual else ["— manter —"]) + [m for m in matches if m != atual]
                     escolha = st.selectbox("p", _opc, key=f"selc_{num_orcamento}_{idx}", label_visibility="collapsed")
-                # Fechar a busca e voltar aos botões (✏️ trocar · ➕ novo)
-                if st.button("✓ concluir", key=f"btnok_{num_orcamento}_{idx}", use_container_width=True):
+                # Confirmar: já troca o item pelo selecionado (confirmado, com preço e ST)
+                if st.button("✓ confirmar troca", key=f"btnok_{num_orcamento}_{idx}",
+                             type="primary", use_container_width=True):
+                    _new = escolha
+                    if _new and _new in por_desc and _new != atual:
+                        _p = por_desc[_new]
+                        it["produto"] = _new
+                        it["ncm"]   = _p.get("ncm", "")
+                        it["preco"] = _p["preco"]
+                        it["total"] = _p["preco"] * it["quantidade"]
+                        it["score"] = 100.0
+                        it["conf"]  = "CONFIRMADO"
+                        it.pop("st_base", None)
+                        if dados_supabase and dados_supabase.disponivel():
+                            try:
+                                it["st_unit"] = dados_supabase.calcular_st_difal(
+                                    _p["preco"], _p.get("ncm", ""), uf_destino,
+                                    consumidor_final=_C.get("consumidor_final", False))
+                            except Exception:
+                                it["st_unit"] = 0.0
+                            try:
+                                dados_supabase.salvar_correcao(it["descricao"], _new, tabela, vendedor)
+                            except Exception:
+                                pass
+                        for _kk in ("sug", "nao", "conf"):
+                            st.session_state["cotacao"][_kk] = [
+                                x for x in st.session_state["cotacao"][_kk] if x is not it]
+                        st.session_state["cotacao"]["conf"].append(it)
+                        st.session_state[f"sug_{num_orcamento}_{idx}"] = _new
                     st.session_state[_editk] = False
                     st.rerun()
             else:
@@ -1811,6 +1842,8 @@ if st.session_state.get("cotacao"):
                     st.session_state[_addk] = not st.session_state.get(_addk, False)
                     st.rerun()
             escolhas[idx] = escolha
+            # Espelho p/ a sugestão em c1 refletir a seleção em tempo real
+            st.session_state[f"sug_{num_orcamento}_{idx}"] = escolha
         prod_sel = por_desc.get(escolha)
         qtd = it["quantidade"]
         _txt_prod = (str(prod_sel.get("categoria", "")) + " " + str(prod_sel.get("descricao", ""))).upper() if prod_sel else ""
