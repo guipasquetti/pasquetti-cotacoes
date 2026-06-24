@@ -379,6 +379,35 @@ st.markdown(f"""
   [data-testid="collapsedControl"],
   [data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
 
+  /* ── Botões menores e mais discretos (design minimalista) ── */
+  .stButton > button {{
+    padding: 0.18rem 0.55rem !important;
+    font-size: 11.5px !important;
+    min-height: 1.7rem !important;
+    line-height: 1.15 !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+  }}
+  .stDownloadButton > button {{
+    padding: 0.25rem 0.7rem !important;
+    font-size: 12px !important;
+    box-shadow: none !important;
+  }}
+
+  /* ── Barra de ações fixa no rodapé (Salvar / Baixar sempre visíveis) ── */
+  .st-key-barra_acoes {{
+    position: sticky;
+    bottom: 0;
+    z-index: 100;
+    background: #ffffff;
+    padding: 6px 14px 8px 14px;
+    margin-top: 6px;
+    border-top: 1px solid #e3e8f0;
+    box-shadow: 0 -5px 16px rgba(27,48,101,0.08);
+    border-radius: 12px 12px 0 0;
+  }}
+
   /* ── Campos de entrada: contraste no fundo claro (regra global) ── */
   .stApp input, .stApp textarea,
   .stApp [data-baseweb="input"] input,
@@ -1764,17 +1793,17 @@ if st.session_state.get("cotacao"):
         with c1:
             sc = it.get("score")
             sc_txt = f" <span style='color:#999;font-size:10px'>({sc:.0f}%)</span>" if sc else ""
-            st.markdown(f"<div style='font-size:12px;padding-top:6px'><strong>{it['descricao']}</strong>{sc_txt}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:13.5px;padding-top:6px'><strong>{it['descricao']}</strong>{sc_txt}</div>", unsafe_allow_html=True)
             # Sugestão na MESMA coluna do solicitado (texto puro) — reflete a seleção em tempo real
             _editando = st.session_state.get(f"editar_{num_orcamento}_{idx}")
             _show = (st.session_state.get(f"sug_{num_orcamento}_{idx}") or atual) if _editando else atual
             if _show == "— manter —":
                 _show = atual
             if _show and _show in por_desc:
-                st.markdown(f"<div style='font-size:11px;color:#1f7a3d'>→ <strong>{_show}</strong></div>",
+                st.markdown(f"<div style='font-size:12px;color:#1f7a3d'>→ <strong>{_show}</strong></div>",
                             unsafe_allow_html=True)
             else:
-                st.markdown("<div style='font-size:11px;color:#b00000'>→ sem correspondência no catálogo</div>",
+                st.markdown("<div style='font-size:12px;color:#b00000'>→ sem correspondência no catálogo</div>",
                             unsafe_allow_html=True)
         with c2:
             _editk = f"editar_{num_orcamento}_{idx}"
@@ -1849,7 +1878,7 @@ if st.session_state.get("cotacao"):
         _txt_prod = (str(prod_sel.get("categoria", "")) + " " + str(prod_sel.get("descricao", ""))).upper() if prod_sel else ""
         _is_tubo = "TUBO" in _txt_prod
         with c3:
-            st.markdown(f"<div style='font-size:12px;padding-top:6px;text-align:center'>{qtd:.0f}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:13px;padding-top:6px;text-align:center'>{qtd:.0f}</div>", unsafe_allow_html=True)
         with c4:
             # Unidade: default sempre UN. Só TUBOS podem trocar para M (metros).
             if _is_tubo:
@@ -1857,7 +1886,7 @@ if st.session_state.get("cotacao"):
                                        key=f"un_{num_orcamento}_{idx}", label_visibility="collapsed")
             else:
                 unidade = "UN"
-                st.markdown("<div style='font-size:12px;padding-top:6px;text-align:center;color:#888'>UN</div>",
+                st.markdown("<div style='font-size:13px;padding-top:6px;text-align:center;color:#888'>UN</div>",
                             unsafe_allow_html=True)
             it["unidade"] = unidade
         # Preço conforme a unidade (conversão por comprimento de barra):
@@ -1882,10 +1911,10 @@ if st.session_state.get("cotacao"):
         with c5:
             _conv = " *" if (prod_sel and _is_tubo and preco != base_preco) else ""
             _pt = f"R$ {preco:,.2f}{_conv}" if preco else "—"
-            st.markdown(f"<div style='font-size:12px;padding-top:6px;text-align:right'>{_pt}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:13px;padding-top:6px;text-align:right'>{_pt}</div>", unsafe_allow_html=True)
         with c6:
             _tt = f"R$ {total:,.2f}" if total else "—"
-            st.markdown(f"<div style='font-size:12px;padding-top:6px;text-align:right'><strong>{_tt}</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:13px;padding-top:6px;text-align:right'><strong>{_tt}</strong></div>", unsafe_allow_html=True)
         with c7:
             ok_val = st.checkbox("ok", key=f"ok_{num_orcamento}_{idx}",
                                  value=(conf_it == "CONFIRMADO"), label_visibility="collapsed")
@@ -1953,26 +1982,30 @@ if st.session_state.get("cotacao"):
     st.caption("\\* preço convertido pela unidade escolhida (UN ↔ M) usando o comprimento da barra: "
                "JGS 6 m · SMU/SME 3 m. Default é UN; troque para M só quando o cliente pedir em metros.")
 
-    # Ações + download
-    st.markdown("---")
+    # Ações + download — barra FIXA no rodapé (sempre visível, sem rolar)
     tabelas_nome = {"consumo":"TABELA HL CONSUMO — Março/2026","revenda":"TABELA HL REVENDA — Março/2026",
                     "pressao":"TABELA PRESSÃO JGS — Abril/2026","smu":"TABELA SMU — Fevereiro/2026","todos":"MÚLTIPLAS TABELAS"}
     cliente_dict = {"nome":nome,"cnpj":cnpj_input,"endereco":endereco,"telefone":telefone,"email":email}
     xlsx_bytes = gerar_xlsx_bytes(conf, sug, nao, num_orcamento, cliente_dict, tabelas_nome[tabela], vendedor, condicao_pagamento=cond_pagamento, consumidor_final=_C.get("consumidor_final", False))
     nome_arq = f"cotacao_{num_orcamento}_{nome.replace(' ','_')[:18]}.xlsx" if nome else f"cotacao_{num_orcamento}.xlsx"
-    b1, b2 = st.columns(2)
-    with b1:
-        salvar = st.button("💾 Salvar revisão e refazer cotação", key=f"salvar_{num_orcamento}", type="primary", use_container_width=True)
-    with b2:
-        st.download_button("⬇️  Baixar Cotação (.xlsx)", data=xlsx_bytes, file_name=nome_arq,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True)
     _imp_nome = "DIFAL" if _C.get("consumidor_final", False) else "ST"
-    # Totais já com a conversão de unidade aplicada (espelham o Excel)
     _sub_conf = sum(i.get("total", 0.0) for i in conf)
     _st_conf = sum(i.get("st_unit", 0.0) * i["quantidade"] for i in conf)
-    extra_st = f" · {_imp_nome}: R$ {_st_conf:,.2f}" if _st_conf else ""
-    st.info(f"📄 Orçamento **Nº {num_orcamento}** · {len(conf)} confirmados · Subtotal R$ {_sub_conf:,.2f}{extra_st}")
+    _extra = f" · {_imp_nome}: R$ {_st_conf:,.2f}" if _st_conf else ""
+    try:
+        _bar = st.container(key="barra_acoes")
+    except TypeError:
+        _bar = st.container()  # fallback p/ Streamlit < 1.39 (sem fixar)
+    with _bar:
+        ba1, ba2, ba3 = st.columns([2.2, 1.4, 1.4])
+        ba1.markdown(f"<div style='padding-top:8px;font-size:12.5px;color:{NAVY}'>"
+                     f"📄 Nº <strong>{num_orcamento}</strong> · {len(conf)} confirmados · "
+                     f"<strong>R$ {_sub_conf:,.2f}</strong>{_extra}</div>", unsafe_allow_html=True)
+        salvar = ba2.button("💾 Salvar e refazer", key=f"salvar_{num_orcamento}",
+                            type="primary", use_container_width=True)
+        ba3.download_button("⬇️ Baixar (.xlsx)", data=xlsx_bytes, file_name=nome_arq,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True)
 
     # Itens que não trabalhamos (não entram no Excel enviado ao cliente)
     if nao_trab:
