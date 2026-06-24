@@ -113,6 +113,66 @@ def salvar_correcao(texto_cliente, produto_descricao, tabela="", vendedor=""):
     return True
 
 
+# ── Produtos manuais (cadastrados fora das tabelas de preço) ──────────────────
+
+def listar_produtos_manuais():
+    """Lista os produtos cadastrados manualmente. Entram no catálogo em qualquer
+    tabela e sobrevivem à regeneração do catalogo_produtos.json."""
+    try:
+        rows = _req("GET", "produtos_manuais",
+                    params={"select": "descricao,preco,ncm,categoria,tabela,unidade"}) or []
+        out = []
+        for r in rows:
+            try:
+                preco = float(r.get("preco") or 0)
+            except (TypeError, ValueError):
+                preco = 0.0
+            out.append({
+                "descricao": r.get("descricao", "") or "",
+                "preco": preco,
+                "ncm": r.get("ncm", "") or "",
+                "categoria": r.get("categoria", "Manual") or "Manual",
+                "tabela": r.get("tabela", "MANUAL") or "MANUAL",
+                "tamanho": "",
+                "unidade": r.get("unidade", "UN") or "UN",
+                "manual": True,
+            })
+        return out
+    except Exception:
+        return []
+
+def salvar_produto_manual(descricao, preco, ncm="", categoria="Manual",
+                          unidade="UN", vendedor=""):
+    """Cadastra (ou atualiza) um produto manual. Idempotente por descricao_norm."""
+    norm = normalizar(descricao)
+    if not norm:
+        return False
+    try:
+        _req("POST", "produtos_manuais",
+             params={"on_conflict": "descricao_norm"},
+             body={"descricao": descricao, "descricao_norm": norm,
+                   "preco": float(preco or 0), "ncm": ncm or "",
+                   "categoria": categoria or "Manual", "tabela": "MANUAL",
+                   "unidade": unidade or "UN", "vendedor": vendedor or ""},
+             extra_headers={"Prefer": "resolution=merge-duplicates,return=minimal"})
+        return True
+    except Exception:
+        return False
+
+def remover_produto_manual(descricao):
+    """Remove um produto manual pela descrição."""
+    norm = normalizar(descricao)
+    if not norm:
+        return False
+    try:
+        _req("DELETE", "produtos_manuais",
+             params={"descricao_norm": f"eq.{norm}"},
+             extra_headers={"Prefer": "return=minimal"})
+        return True
+    except Exception:
+        return False
+
+
 # ── Itens que não trabalhamos (não fornecemos) ────────────────────────────────
 
 def listar_nao_trabalhados():

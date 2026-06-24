@@ -979,8 +979,41 @@ def carregar_catalogo(tabela):
             "pressao":["PRESSAO_JGS"],"smu":["SMU"],
             "todos":["HL_CONSUMO","HL_REVENDA","PRESSAO_JGS","SMU"]}
     catalogo = [p for p in todos if p["tabela"] in mapa.get(tabela,["HL_CONSUMO"])]
+    # Produtos cadastrados manualmente entram em QUALQUER tabela e sobrevivem
+    # à regeneração do catalogo_produtos.json (ficam no Supabase).
+    if dados_supabase and dados_supabase.disponivel():
+        try:
+            catalogo = catalogo + dados_supabase.listar_produtos_manuais()
+        except Exception:
+            pass
     for p in catalogo: p["_norm"] = expandir(p["descricao"])
     return catalogo
+
+
+def _reprocessar_cotacao(uf_destino):
+    """Refaz a cotação atual a partir de itens_brutos, aplicando correções/itens
+    'não trabalhamos' aprendidos e recalculando ST/DIFAL. Atualiza o session_state."""
+    _C = st.session_state.get("cotacao")
+    if not _C:
+        return
+    _ib   = _C.get("itens_brutos", [])
+    _ia   = _C.get("usar_ia", False)
+    _tab  = _C.get("tabela", "consumo")
+    _disp = bool(dados_supabase and dados_supabase.disponivel())
+    _cat  = carregar_catalogo(_tab)
+    _corr = dados_supabase.listar_correcoes(_tab) if _disp else {}
+    _nt   = dados_supabase.listar_nao_trabalhados() if _disp else set()
+    _conf, _sug, _nao, _nao_trab = processar_hibrido(_ib, _cat, _ia, _corr, _nt)
+    _regras = dados_supabase.listar_regras_st() if _disp else {}
+    _cf = _C.get("consumidor_final", False)
+    for _it in _conf:
+        _it["st_unit"] = (dados_supabase.calcular_st_difal(
+            _it["preco"], _it.get("ncm", ""), uf_destino,
+            regras=_regras, consumidor_final=_cf) if _disp else 0.0)
+    st.session_state["cotacao"].update({
+        "conf": _conf, "sug": _sug, "nao": _nao, "nao_trab": _nao_trab,
+        "subtotal": sum(i["total"] for i in _conf),
+        "total_st": sum(i.get("st_unit", 0.0) * i["quantidade"] for i in _conf)})
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1689,7 +1722,7 @@ if st.session_state.get("cotacao"):
     _COLS = [0.4, 2.6, 3.6, 0.6, 0.7, 1.05, 1.15, 0.65, 0.5]
 
     hc = st.columns(_COLS)
-    for _c, _t in zip(hc, ["", "Solicitado  →  sugestão", "Trocar produto (busca)", "Qtd",
+    for _c, _t in zip(hc, ["", "Solicitado  →  sugestão", "Produto (✏️ trocar · ➕ novo)", "Qtd",
                            "Un.", "Preço Un.", "Total", "Certo?", ""]):
         _c.markdown(f"<div style='font-weight:700;color:{NAVY};font-size:12px'>{_t}</div>", unsafe_allow_html=True)
 
@@ -1714,25 +1747,39 @@ if st.session_state.get("cotacao"):
                 st.markdown("<div style='font-size:11px;color:#b00000'>→ sem correspondência no catálogo</div>",
                             unsafe_allow_html=True)
         with c2:
-            if st_searchbox is not None:
-                def _busca(q, _base=_norm_base, _atual=atual):
-                    if not q or not q.strip():
-                        return [_atual] if _atual else []
-                    toks = normalizar(q).split()
-                    return [d for d, dn in _base if all(t in dn for t in toks)][:25]
-                sel = st_searchbox(_busca, key=f"corr_{num_orcamento}_{idx}",
-                                   placeholder="digite termos — ex.: ralo smu", default=atual or None)
-                escolha = sel or atual or "— manter —"
-            else:
-                q = st.text_input("p", key=f"busca_{num_orcamento}_{idx}",
-                                  placeholder="digite termos — ex.: ralo smu", label_visibility="collapsed")
-                if q.strip():
-                    toks = normalizar(q).split()
-                    matches = [d for d, dn in _norm_base if all(t in dn for t in toks)][:10]
+            _editk = f"editar_{num_orcamento}_{idx}"
+            _addk  = f"novo_{num_orcamento}_{idx}"
+            if st.session_state.get(_editk):
+                # Busca pesada renderizada SÓ na linha aberta (sob demanda)
+                if st_searchbox is not None:
+                    def _busca(q, _base=_norm_base, _atual=atual):
+                        if not q or not q.strip():
+                            return [_atual] if _atual else []
+                        toks = normalizar(q).split()
+                        return [d for d, dn in _base if all(t in dn for t in toks)][:25]
+                    sel = st_searchbox(_busca, key=f"corr_{num_orcamento}_{idx}",
+                                       placeholder="digite termos — ex.: ralo smu", default=atual or None)
+                    escolha = sel or atual or "— manter —"
                 else:
-                    matches = [atual] if atual else []
-                _opc = ([atual] if atual else ["— manter —"]) + [m for m in matches if m != atual]
-                escolha = st.selectbox("p", _opc, key=f"selc_{num_orcamento}_{idx}", label_visibility="collapsed")
+                    q = st.text_input("p", key=f"busca_{num_orcamento}_{idx}",
+                                      placeholder="digite termos — ex.: ralo smu", label_visibility="collapsed")
+                    if q.strip():
+                        toks = normalizar(q).split()
+                        matches = [d for d, dn in _norm_base if all(t in dn for t in toks)][:10]
+                    else:
+                        matches = [atual] if atual else []
+                    _opc = ([atual] if atual else ["— manter —"]) + [m for m in matches if m != atual]
+                    escolha = st.selectbox("p", _opc, key=f"selc_{num_orcamento}_{idx}", label_visibility="collapsed")
+            else:
+                escolha = atual or "— manter —"
+                _b1, _b2 = st.columns(2)
+                if _b1.button("✏️ trocar", key=f"btned_{num_orcamento}_{idx}", use_container_width=True):
+                    st.session_state[_editk] = True
+                    st.rerun()
+                if _b2.button("➕ novo", key=f"btnnv_{num_orcamento}_{idx}", use_container_width=True,
+                              help="Cadastrar um produto que não está na tabela"):
+                    st.session_state[_addk] = not st.session_state.get(_addk, False)
+                    st.rerun()
             escolhas[idx] = escolha
         prod_sel = por_desc.get(escolha)
         qtd = it["quantidade"]
@@ -1794,6 +1841,31 @@ if st.session_state.get("cotacao"):
                     st.rerun()
         if ok_val and total:
             subtotal_prev += total
+
+        # Formulário "cadastrar produto novo" (abre abaixo da linha ao clicar "➕ novo")
+        if st.session_state.get(f"novo_{num_orcamento}_{idx}"):
+            with st.container():
+                fc1, fc2, fc3, fc4 = st.columns([5, 1.6, 1.6, 1.8])
+                _nd = fc1.text_input("Descrição do produto novo", value=it["descricao"],
+                                     key=f"ndesc_{num_orcamento}_{idx}")
+                _np = fc2.number_input("Preço R$", min_value=0.0, step=0.01, format="%.2f",
+                                       key=f"npreco_{num_orcamento}_{idx}")
+                _nn = fc3.text_input("NCM", key=f"nncm_{num_orcamento}_{idx}",
+                                     help="Opcional, mas recomendado p/ calcular ST/DIFAL")
+                if fc4.button("Cadastrar e usar", key=f"ncad_{num_orcamento}_{idx}",
+                              type="primary", use_container_width=True):
+                    if not (dados_supabase and dados_supabase.disponivel()):
+                        st.warning("Sem conexão com o banco — não dá pra cadastrar agora.")
+                    elif _nd.strip() and _np > 0:
+                        dados_supabase.salvar_produto_manual(_nd, _np, _nn, vendedor=vendedor)
+                        dados_supabase.salvar_correcao(it["descricao"], _nd, tabela, vendedor)
+                        carregar_catalogo.clear()
+                        st.session_state[f"novo_{num_orcamento}_{idx}"] = False
+                        _reprocessar_cotacao(uf_destino)
+                        flash(f"Produto “{_nd[:40]}” cadastrado, vinculado e incluído na cotação.", "success")
+                        st.rerun()
+                    else:
+                        st.warning("Informe a descrição e um preço maior que zero.")
 
     st.markdown(f"<p style='text-align:right;font-weight:700;font-size:15px;color:{NAVY};margin-top:8px;'>"
                 f"Subtotal (itens ✔): R$ {subtotal_prev:,.2f}</p>", unsafe_allow_html=True)
@@ -1867,22 +1939,7 @@ if st.session_state.get("cotacao"):
                     except Exception as e:
                         st.error(f"Erro ao salvar '{it['descricao']}': {e}")
             if n_salvos:
-                _ib = _C.get("itens_brutos", [])
-                _ia = _C.get("usar_ia", False)
-                _cat = carregar_catalogo(tabela)
-                _corr = dados_supabase.listar_correcoes(tabela)
-                _nt = dados_supabase.listar_nao_trabalhados()
-                _conf, _sug, _nao, _nao_trab = processar_hibrido(_ib, _cat, _ia, _corr, _nt)
-                _regras = dados_supabase.listar_regras_st()
-                _cf = _C.get("consumidor_final", False)
-                for _it in _conf:
-                    _it["st_unit"] = dados_supabase.calcular_st_difal(
-                        _it["preco"], _it.get("ncm",""), uf_destino,
-                        regras=_regras, consumidor_final=_cf)
-                st.session_state["cotacao"].update({
-                    "conf":_conf,"sug":_sug,"nao":_nao,"nao_trab":_nao_trab,
-                    "subtotal":sum(i["total"] for i in _conf),
-                    "total_st":sum(i.get("st_unit",0.0)*i["quantidade"] for i in _conf)})
+                _reprocessar_cotacao(uf_destino)
                 flash(f"{n_salvos} item(ns) corrigido(s)/confirmado(s) e aprendido(s). Cotação refeita.", "success")
                 st.rerun()
             else:
