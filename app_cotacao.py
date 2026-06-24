@@ -374,6 +374,11 @@ st.markdown(f"""
 
   #MainMenu, footer, [data-testid="stToolbar"] {{ visibility: hidden !important; }}
 
+  /* Remove o botão de recolher/esconder a barra lateral (menu sempre visível) */
+  [data-testid="stSidebarCollapseButton"],
+  [data-testid="collapsedControl"],
+  [data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
+
   /* ── Campos de entrada: contraste no fundo claro (regra global) ── */
   .stApp input, .stApp textarea,
   .stApp [data-baseweb="input"] input,
@@ -845,16 +850,27 @@ def parse_texto(texto):
         if desc and desc.lower() not in ("none","nan"): itens.append({"descricao": desc, "quantidade": qtd})
     return itens
 
-def _abrir_workbook(data):
-    """Abre .xlsx com openpyxl; se for .xls antigo, tenta via pandas/xlrd.
-    Levanta ValueError com mensagem amigável se não der."""
+def _listar_abas(data):
+    """Devolve (lista_de_abas, aba_ativa). Lista vazia se não for xlsx legível."""
     try:
-        return openpyxl.load_workbook(io.BytesIO(data), data_only=True).active, None
+        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        nomes = list(wb.sheetnames); ativa = wb.active.title; wb.close()
+        return nomes, ativa
+    except Exception:
+        return [], None
+
+def _abrir_workbook(data, sheet=None):
+    """Abre .xlsx com openpyxl (aba `sheet` ou a ativa); se for .xls antigo,
+    tenta via pandas/xlrd. Levanta ValueError com mensagem amigável se não der."""
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
+        ws = wb[sheet] if (sheet and sheet in wb.sheetnames) else wb.active
+        return ws, None
     except Exception as e_openpyxl:
         # Fallback p/ .xls (formato binário antigo) usando pandas
         try:
             import pandas as pd
-            df = pd.read_excel(io.BytesIO(data), header=None)
+            df = pd.read_excel(io.BytesIO(data), sheet_name=(sheet if sheet else 0), header=None)
             return ("__df__", df)
         except Exception:
             raise ValueError(
@@ -883,8 +899,8 @@ def _detectar_colunas(linhas):
         return so_desc
     return 0, 1, 0  # sem cabeçalho reconhecido: col A=descrição, B=qtd, sem linha p/ pular
 
-def parse_xlsx_bytes(data):
-    ws, df = _abrir_workbook(data)
+def parse_xlsx_bytes(data, sheet=None):
+    ws, df = _abrir_workbook(data, sheet)
     # Caminho pandas (.xls)
     if ws == "__df__":
         linhas = df.values.tolist()
@@ -1052,7 +1068,8 @@ def gerar_xlsx_bytes(confirmados, sugestoes_manuais, nao_enc, num, cliente, tabe
         # H unit c/ imp = E+F+G | I total = D*H
         valores = [item["produto"], item["ncm"], item["quantidade"], item["preco"],
                    float(item.get("st_unit", 0.0)), 0.0, f"=E{ROW}+F{ROW}+G{ROW}", f"=D{ROW}*H{ROW}"]
-        fmts    = [None, None, '#,##0.###', '#,##0.0000', '#,##0.0000',
+        _un = item.get("unidade", "UN")
+        fmts    = [None, None, f'#,##0.### "{_un}"', '#,##0.0000', '#,##0.0000',
                    '#,##0.0000', '#,##0.0000', '#,##0.00']
         aligns  = ["left","center","center","right","right","right","right","right"]
         for j,(v,f,a) in enumerate(zip(valores, fmts, aligns), 2):
@@ -1453,8 +1470,15 @@ with tab1:
             itens_brutos = parse_texto(data.decode("utf-8", errors="ignore"))
             st.success(f"✅ **{len(itens_brutos)} itens** lidos do arquivo de texto")
         elif ext in (".xlsx",".xls"):
+            abas, aba_ativa = _listar_abas(data)
+            sheet_sel = None
+            if len(abas) > 1:
+                idx = abas.index(aba_ativa) if aba_ativa in abas else 0
+                sheet_sel = st.selectbox(
+                    "Aba da planilha", abas, index=idx,
+                    help="Esta planilha tem várias abas. Escolha qual contém os itens a cotar.")
             try:
-                itens_brutos = parse_xlsx_bytes(data)
+                itens_brutos = parse_xlsx_bytes(data, sheet_sel)
             except ValueError as e:
                 st.error(f"❌ {e}"); itens_brutos = []
             except Exception as e:
@@ -1610,89 +1634,158 @@ if st.session_state.get("cotacao"):
     with m4: st.markdown(f'<div class="pq-metric"><div class="pq-metric-val">{len(nao_trab)}</div><div class="pq-metric-lbl">Não trabalhamos</div></div>', unsafe_allow_html=True)
     with m5: st.markdown(f'<div class="pq-metric"><div class="pq-metric-val">R$ {subtotal:,.2f}</div><div class="pq-metric-lbl">Subtotal (confirmados)</div></div>', unsafe_allow_html=True)
 
-    # Tabela de confirmados
-    if conf:
-        st.markdown('<span class="pq-section" style="color:#27ae60">✅ Itens Confirmados — entram na cotação</span>', unsafe_allow_html=True)
-        linhas = ""
-        for it in conf:
-            s = it["score"]
-            badge = f'<span class="badge badge-a">{s:.0f}%</span>' if s>=90 else f'<span class="badge badge-m">{s:.0f}%</span>'
-            linhas += f"""<tr>
-              <td style="color:#555;font-style:italic;font-size:11px">{it['descricao']}</td>
-              <td><strong>{it['produto']}</strong></td>
-              <td style="text-align:center">{it['quantidade']:.0f}</td>
-              <td style="text-align:right">R$ {it['preco']:,.4f}</td>
-              <td style="text-align:right"><strong>R$ {it['total']:,.2f}</strong></td>
-              <td style="text-align:center">{badge}</td>
-            </tr>"""
-        st.markdown(f"""<table class="pq-table">
-          <thead><tr>
-            <th>Solicitado</th><th>Produto no Catálogo</th>
-            <th style="text-align:center">Qtd</th>
-            <th style="text-align:right">Preço Unit.</th>
-            <th style="text-align:right">Total</th>
-            <th style="text-align:center">Score</th>
-          </tr></thead>
-          <tbody>{linhas}</tbody>
-        </table>
-        <p style="text-align:right;font-weight:700;font-size:15px;color:{NAVY};margin-top:10px;">
-          Subtotal: R$ {subtotal:,.2f}
-        </p>""", unsafe_allow_html=True)
+    # ── Conferir e corrigir — tabela única e editável ─────────────────────────
+    st.markdown("---")
+    st.markdown('<span class="pq-section">📋 Conferir e corrigir — confirme ✔ ou troque o produto na mesma linha</span>', unsafe_allow_html=True)
+    _disp_corr = bool(dados_supabase and dados_supabase.disponivel())
+    if not _disp_corr:
+        st.warning("Sem conexão com o banco de aprendizado agora — você pode revisar e corrigir, "
+                   "mas as correções só serão memorizadas quando reconectar.")
+    st.caption("Cada linha traz o que foi pedido e o produto sugerido (com o % de precisão). "
+               "Marque ✔ se estiver certo, ou digite termos na busca para trocar o produto (ex.: \"ralo smu\"). "
+               "Só os itens marcados ✔ entram na cotação enviada.")
 
-    # Sugestões (não entram automaticamente)
-    if sug:
-        sug_rows = ""
-        for s in sug:
-            just = s.get("justificativa", "")
-            just_html = f'<br><span style="color:#999;font-size:10px">{just}</span>' if just else ""
-            sug_rows += f"""<tr>
-              <td style="color:#555;font-style:italic">{s['descricao']}</td>
-              <td>{s.get('produto','—')}{just_html}</td>
-              <td style="text-align:center">{s['quantidade']:.0f}</td>
-              <td style="text-align:center"><span class="badge badge-s">{s['score']:.0f}%</span></td>
-            </tr>"""
-        st.markdown(f"""<div class="pq-suggest">
-          <div class="pq-suggest-title">⚠️ Sugestões com correspondência parcial (60–79%) — NÃO incluídas na cotação</div>
-          <p style="color:#7a5a20;margin-bottom:10px;font-size:11px;">
-            Revise cada item abaixo. Se a sugestão estiver correta, confirme e inclua manualmente na cotação.
-          </p>
-          <table class="pq-table" style="font-size:11px;">
-            <thead><tr>
-              <th>Solicitado</th><th>Melhor Sugestão</th>
-              <th style="text-align:center">Qtd</th>
-              <th style="text-align:center">Precisão</th>
-            </tr></thead>
-            <tbody>{sug_rows}</tbody>
-          </table>
-        </div>""", unsafe_allow_html=True)
+    catalogo = carregar_catalogo(tabela)
+    por_desc = {p["descricao"]: p for p in catalogo}
+    _norm_base = [(p["descricao"], normalizar(p["descricao"])) for p in catalogo]
+    _ordem = {"NÃO ENCONTRADO": 0, "SUGESTÃO": 1, "CONFIRMADO": 2}
+    revisaveis = sorted(conf + sug + nao, key=lambda it: _ordem.get(it.get("conf", ""), 3))
+    _icone = {"CONFIRMADO": "✅", "SUGESTÃO": "⚠️", "NÃO ENCONTRADO": "❌"}
+    _COLS = [0.4, 2.6, 3.6, 0.6, 0.7, 1.05, 1.15, 0.65, 0.5]
 
-    # Não encontrados (com opção de marcar "não trabalhamos")
-    if nao:
-        st.markdown('<div class="pq-notfound"><div class="pq-notfound-title">'
-                    '❌ Itens não encontrados no catálogo</div></div>', unsafe_allow_html=True)
-        _disp_nt = bool(dados_supabase and dados_supabase.disponivel())
-        for j, n in enumerate(nao):
-            c1, c2 = st.columns([4, 2])
-            with c1:
-                st.markdown(f"<div style='padding-top:6px;font-size:13px'>• <strong>{n['descricao']}</strong> "
-                            f"<span style='color:#888'>(qtd: {n['quantidade']:.0f})</span></div>",
+    hc = st.columns(_COLS)
+    for _c, _t in zip(hc, ["", "Solicitado", "Produto sugerido — confirme ou troque", "Qtd",
+                           "Un.", "Preço Un.", "Total", "Certo?", ""]):
+        _c.markdown(f"<div style='font-weight:700;color:{NAVY};font-size:12px'>{_t}</div>", unsafe_allow_html=True)
+
+    escolhas = {}
+    subtotal_prev = 0.0
+    for idx, it in enumerate(revisaveis):
+        atual = it.get("produto", "")
+        conf_it = it.get("conf", "")
+        ic = _icone.get(conf_it, "")
+        c0, c1, c2, c3, c4, c5, c6, c7, c8 = st.columns(_COLS)
+        with c0:
+            st.markdown(f"<div style='font-size:16px;padding-top:4px;text-align:center'>{ic}</div>", unsafe_allow_html=True)
+        with c1:
+            sc = it.get("score")
+            sc_txt = f" <span style='color:#999;font-size:10px'>({sc:.0f}%)</span>" if sc else ""
+            st.markdown(f"<div style='font-size:12px;padding-top:6px'><strong>{it['descricao']}</strong>{sc_txt}</div>", unsafe_allow_html=True)
+        with c2:
+            if st_searchbox is not None:
+                def _busca(q, _base=_norm_base, _atual=atual):
+                    if not q or not q.strip():
+                        return [_atual] if _atual else []
+                    toks = normalizar(q).split()
+                    return [d for d, dn in _base if all(t in dn for t in toks)][:25]
+                sel = st_searchbox(_busca, key=f"corr_{num_orcamento}_{idx}",
+                                   placeholder="digite termos — ex.: ralo smu", default=atual or None)
+                escolha = sel or atual or "— manter —"
+            else:
+                q = st.text_input("p", key=f"busca_{num_orcamento}_{idx}",
+                                  placeholder="digite termos — ex.: ralo smu", label_visibility="collapsed")
+                if q.strip():
+                    toks = normalizar(q).split()
+                    matches = [d for d, dn in _norm_base if all(t in dn for t in toks)][:10]
+                else:
+                    matches = [atual] if atual else []
+                _opc = ([atual] if atual else ["— manter —"]) + [m for m in matches if m != atual]
+                escolha = st.selectbox("p", _opc, key=f"selc_{num_orcamento}_{idx}", label_visibility="collapsed")
+            escolhas[idx] = escolha
+            # Sugestão/escolha sempre visível em texto, p/ conferir de relance
+            _prodtxt = escolha if (escolha and escolha != "— manter —") else (atual or "")
+            if _prodtxt and _prodtxt in por_desc:
+                st.markdown(f"<div style='font-size:11px;color:#1f7a3d;padding-top:2px'>✓ <strong>{_prodtxt}</strong></div>",
                             unsafe_allow_html=True)
-            with c2:
-                if _disp_nt and st.button("🚫 Não trabalhamos com este item",
-                                          key=f"nt_{num_orcamento}_{j}", use_container_width=True):
+            else:
+                st.markdown("<div style='font-size:11px;color:#b00000;padding-top:2px'>— sem correspondência no catálogo —</div>",
+                            unsafe_allow_html=True)
+        prod_sel = por_desc.get(escolha)
+        qtd = it["quantidade"]
+        _txt_prod = (str(prod_sel.get("categoria", "")) + " " + str(prod_sel.get("descricao", ""))).upper() if prod_sel else ""
+        _is_tubo = "TUBO" in _txt_prod
+        with c3:
+            st.markdown(f"<div style='font-size:12px;padding-top:6px;text-align:center'>{qtd:.0f}</div>", unsafe_allow_html=True)
+        with c4:
+            # Unidade: default sempre UN. Só TUBOS podem trocar para M (metros).
+            if _is_tubo:
+                unidade = st.selectbox("u", ["UN", "M"], index=0,
+                                       key=f"un_{num_orcamento}_{idx}", label_visibility="collapsed")
+            else:
+                unidade = "UN"
+                st.markdown("<div style='font-size:12px;padding-top:6px;text-align:center;color:#888'>UN</div>",
+                            unsafe_allow_html=True)
+            it["unidade"] = unidade
+        # Preço conforme a unidade (conversão por comprimento de barra):
+        #   JGS pressão → catálogo é POR METRO (barra 6m);  UN = preço × 6
+        #   SMU/SME predial → catálogo é POR PEÇA/barra (3m); M = preço ÷ 3
+        base_preco = prod_sel["preco"] if prod_sel else it.get("preco")
+        preco = base_preco
+        if prod_sel and _is_tubo and base_preco:
+            _jgs = (prod_sel.get("tabela") == "PRESSAO_JGS")
+            _L = 6.0 if _jgs else 3.0
+            if unidade == "M":
+                preco = base_preco if _jgs else base_preco / _L
+            else:  # UN (peça/barra)
+                preco = base_preco * _L if _jgs else base_preco
+        total = (preco * qtd) if preco else None
+        # Persiste no item p/ o Excel; ST acompanha proporcional ao preço
+        if prod_sel and base_preco:
+            _st_base = it.setdefault("st_base", it.get("st_unit", 0.0))
+            it["st_unit"] = _st_base * (preco / base_preco)
+            it["preco"] = preco
+            it["total"] = total
+        with c5:
+            _conv = " *" if (prod_sel and _is_tubo and preco != base_preco) else ""
+            _pt = f"R$ {preco:,.2f}{_conv}" if preco else "—"
+            st.markdown(f"<div style='font-size:12px;padding-top:6px;text-align:right'>{_pt}</div>", unsafe_allow_html=True)
+        with c6:
+            _tt = f"R$ {total:,.2f}" if total else "—"
+            st.markdown(f"<div style='font-size:12px;padding-top:6px;text-align:right'><strong>{_tt}</strong></div>", unsafe_allow_html=True)
+        with c7:
+            ok_val = st.checkbox("ok", key=f"ok_{num_orcamento}_{idx}",
+                                 value=(conf_it == "CONFIRMADO"), label_visibility="collapsed")
+        with c8:
+            if _disp_corr and conf_it != "CONFIRMADO":
+                if st.button("🚫", key=f"nt_{num_orcamento}_{idx}", help="Não trabalhamos com este item"):
                     try:
-                        dados_supabase.salvar_nao_trabalhado(n["descricao"], vendedor)
-                        flash(f"“{n['descricao'][:40]}” marcado como não trabalhamos — fora da cotação.", "success")
+                        dados_supabase.salvar_nao_trabalhado(it["descricao"], vendedor)
+                        flash(f"“{it['descricao'][:40]}” marcado como não trabalhamos.", "success")
                     except Exception as e:
                         st.error(f"Erro ao salvar: {e}")
-                    st.session_state["cotacao"]["nao"] = [x for k, x in enumerate(nao) if k != j]
                     st.session_state["cotacao"]["nao_trab"] = list(nao_trab) + [
-                        {"descricao": n["descricao"], "quantidade": n["quantidade"],
-                         "conf": "NÃO TRABALHAMOS"}]
+                        {"descricao": it["descricao"], "quantidade": qtd, "conf": "NÃO TRABALHAMOS"}]
+                    for _kk in ("conf", "sug", "nao"):
+                        st.session_state["cotacao"][_kk] = [x for x in st.session_state["cotacao"][_kk] if x is not it]
                     st.rerun()
-        if _disp_nt:
-            st.caption("Marque os que vocês não fornecem — eles saem da cotação e, "
-                       "nas próximas vezes, já vêm classificados sozinhos.")
+        if ok_val and total:
+            subtotal_prev += total
+
+    st.markdown(f"<p style='text-align:right;font-weight:700;font-size:15px;color:{NAVY};margin-top:8px;'>"
+                f"Subtotal (itens ✔): R$ {subtotal_prev:,.2f}</p>", unsafe_allow_html=True)
+    st.caption("\\* preço convertido pela unidade escolhida (UN ↔ M) usando o comprimento da barra: "
+               "JGS 6 m · SMU/SME 3 m. Default é UN; troque para M só quando o cliente pedir em metros.")
+
+    # Ações + download
+    st.markdown("---")
+    tabelas_nome = {"consumo":"TABELA HL CONSUMO — Março/2026","revenda":"TABELA HL REVENDA — Março/2026",
+                    "pressao":"TABELA PRESSÃO JGS — Abril/2026","smu":"TABELA SMU — Fevereiro/2026","todos":"MÚLTIPLAS TABELAS"}
+    cliente_dict = {"nome":nome,"cnpj":cnpj_input,"endereco":endereco,"telefone":telefone,"email":email}
+    xlsx_bytes = gerar_xlsx_bytes(conf, sug, nao, num_orcamento, cliente_dict, tabelas_nome[tabela], vendedor, condicao_pagamento=cond_pagamento, consumidor_final=_C.get("consumidor_final", False))
+    nome_arq = f"cotacao_{num_orcamento}_{nome.replace(' ','_')[:18]}.xlsx" if nome else f"cotacao_{num_orcamento}.xlsx"
+    b1, b2 = st.columns(2)
+    with b1:
+        salvar = st.button("💾 Salvar revisão e refazer cotação", key=f"salvar_{num_orcamento}", type="primary", use_container_width=True)
+    with b2:
+        st.download_button("⬇️  Baixar Cotação (.xlsx)", data=xlsx_bytes, file_name=nome_arq,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True)
+    _imp_nome = "DIFAL" if _C.get("consumidor_final", False) else "ST"
+    # Totais já com a conversão de unidade aplicada (espelham o Excel)
+    _sub_conf = sum(i.get("total", 0.0) for i in conf)
+    _st_conf = sum(i.get("st_unit", 0.0) * i["quantidade"] for i in conf)
+    extra_st = f" · {_imp_nome}: R$ {_st_conf:,.2f}" if _st_conf else ""
+    st.info(f"📄 Orçamento **Nº {num_orcamento}** · {len(conf)} confirmados · Subtotal R$ {_sub_conf:,.2f}{extra_st}")
 
     # Itens que não trabalhamos (não entram no Excel enviado ao cliente)
     if nao_trab:
@@ -1717,79 +1810,8 @@ if st.session_state.get("cotacao"):
                         x for k, x in enumerate(nao_trab) if k != j]
                     st.rerun()
 
-    # Download
-    st.markdown("---")
-    tabelas_nome = {"consumo":"TABELA HL CONSUMO — Março/2026","revenda":"TABELA HL REVENDA — Março/2026",
-                    "pressao":"TABELA PRESSÃO JGS — Abril/2026","smu":"TABELA SMU — Fevereiro/2026","todos":"MÚLTIPLAS TABELAS"}
-    cliente_dict = {"nome":nome,"cnpj":cnpj_input,"endereco":endereco,"telefone":telefone,"email":email}
-    xlsx_bytes = gerar_xlsx_bytes(conf, sug, nao, num_orcamento, cliente_dict, tabelas_nome[tabela], vendedor, condicao_pagamento=cond_pagamento, consumidor_final=_C.get("consumidor_final", False))
-    nome_arq = f"cotacao_{num_orcamento}_{nome.replace(' ','_')[:18]}.xlsx" if nome else f"cotacao_{num_orcamento}.xlsx"
-
-    dcol, icol = st.columns([1,2])
-    with dcol:
-        st.download_button("⬇️  Baixar Cotação (.xlsx)", data=xlsx_bytes, file_name=nome_arq,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True)
-    with icol:
-        _imp_nome = "DIFAL" if _C.get("consumidor_final", False) else "ST"
-        extra_st = f" · {_imp_nome}: R$ {total_st:,.2f}" if total_st else ""
-        st.info(f"📄 Orçamento **Nº {num_orcamento}** · {len(conf)} itens confirmados · R$ {subtotal:,.2f}{extra_st}")
-
-    # ── Revisar, marcar OK e corrigir — tabela editável ───────────────────────
-    st.markdown("---")
-    st.markdown('<span class="pq-section">🧠 Revisar itens — marque OK ou corrija o produto</span>', unsafe_allow_html=True)
-    _disp_corr = bool(dados_supabase and dados_supabase.disponivel())
-    if not _disp_corr:
-        st.warning("Sem conexão com o banco de aprendizado agora — você pode revisar e corrigir, "
-                   "mas as correções só serão memorizadas quando reconectar.")
-    st.caption("Marque ✔ OK nos itens certos (marcar um item que não veio confirmado também o ensina). "
-               "Para corrigir, digite termos do produto em qualquer ordem (ex.: \"ralo smu\") na lista suspensa.")
-    catalogo = carregar_catalogo(tabela)
-    _norm_base = [(p["descricao"], normalizar(p["descricao"])) for p in catalogo]
-    revisaveis = conf + sug + nao
-    _icone = {"CONFIRMADO":"✅","SUGESTÃO":"⚠️","NÃO ENCONTRADO":"❌"}
-
-    hc = st.columns([3, 4, 1, 1])
-    for _c, _t in zip(hc, ["Solicitado", "Produto no catálogo (digite p/ buscar)", "Qtd", "OK"]):
-        _c.markdown(f"<div style='font-weight:700;color:{NAVY};font-size:12px'>{_t}</div>", unsafe_allow_html=True)
-
-    escolhas = {}
-    for idx, it in enumerate(revisaveis):
-        atual = it.get("produto", "")
-        ic = _icone.get(it.get("conf",""), "")
-        r1, r2, r3, r4 = st.columns([3, 4, 1, 1])
-        with r1:
-            st.markdown(f"<div style='font-size:12px;padding-top:6px'>{ic} <strong>{it['descricao']}</strong></div>",
-                        unsafe_allow_html=True)
-        with r2:
-            if st_searchbox is not None:
-                def _busca(q, _base=_norm_base, _atual=atual):
-                    if not q or not q.strip():
-                        return [_atual] if _atual else []
-                    toks = normalizar(q).split()
-                    return [d for d, dn in _base if all(t in dn for t in toks)][:25]
-                sel = st_searchbox(_busca, key=f"corr_{num_orcamento}_{idx}",
-                                   placeholder="digite termos — ex.: ralo smu", default=atual or None)
-                escolhas[idx] = sel or atual or "— manter —"
-            else:
-                q = st.text_input("p", key=f"busca_{num_orcamento}_{idx}",
-                                  placeholder="digite termos — ex.: ralo smu", label_visibility="collapsed")
-                if q.strip():
-                    toks = normalizar(q).split()
-                    matches = [d for d, dn in _norm_base if all(t in dn for t in toks)][:10]
-                else:
-                    matches = [atual] if atual else []
-                _opc = ([atual] if atual else ["— manter —"]) + [m for m in matches if m != atual]
-                escolhas[idx] = st.selectbox("p", _opc, key=f"selc_{num_orcamento}_{idx}",
-                                             label_visibility="collapsed")
-        with r3:
-            st.markdown(f"<div style='font-size:12px;padding-top:6px;text-align:center'>{it['quantidade']:.0f}</div>",
-                        unsafe_allow_html=True)
-        with r4:
-            st.checkbox("ok", key=f"ok_{num_orcamento}_{idx}",
-                        value=(it.get("conf") == "CONFIRMADO"), label_visibility="collapsed")
-
-    if st.button("💾 Salvar revisão e refazer cotação", key=f"salvar_{num_orcamento}", type="primary"):
+    # Salvar revisão: memoriza correções e refaz a cotação
+    if salvar:
         if not _disp_corr:
             st.warning("Sem conexão com o banco — não foi possível memorizar as correções agora.")
         else:
@@ -1811,7 +1833,6 @@ if st.session_state.get("cotacao"):
                     except Exception as e:
                         st.error(f"Erro ao salvar '{it['descricao']}': {e}")
             if n_salvos:
-                # Refaz a cotação automaticamente já com as correções aprendidas
                 _ib = _C.get("itens_brutos", [])
                 _ia = _C.get("usar_ia", False)
                 _cat = carregar_catalogo(tabela)
