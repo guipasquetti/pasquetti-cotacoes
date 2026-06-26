@@ -573,10 +573,13 @@ def extrair_diametros(texto):
         if n not in ANGULOS and 40 <= int(n) <= 600: result.add(n)
     return result
 
+# Pré-computa o normalizar() de cada tipo UMA vez (antes era recalculado, via
+# regex, 13x para cada par item×produto dentro de buscar — gargalo de desempenho).
+_TIPO_KW_NORM = [(normalizar(_t), _kws) for _t, _kws in TIPO_KEYWORDS.items()]
+
 def bonus_tipo(query_exp, cat_desc):
     """Bônus se query e produto são do mesmo tipo."""
-    for tipo, keywords in TIPO_KEYWORDS.items():
-        tipo_norm = normalizar(tipo)
+    for tipo_norm, keywords in _TIPO_KW_NORM:
         if any(k in query_exp for k in keywords):
             if tipo_norm in cat_desc:
                 return 12
@@ -658,20 +661,75 @@ def score_set(a, b):
                difflib.SequenceMatcher(None, t0, t2).ratio(),
                difflib.SequenceMatcher(None, t1, t2).ratio()) * 100
 
-def buscar(descricao, catalogo):
+# ── Índice invertido (token → índices) p/ acelerar a busca ───────────────────
+# Em vez de pontuar TODOS os ~6,7 mil produtos por item, só pontuamos os que
+# compartilham ao menos um token com o pedido (validado: mesmo vencedor/score
+# do scan completo — produtos sem token em comum nunca vencem). Construído uma
+# vez por catálogo (cacheado por identidade da lista).
+_CAT_INV = {}
+
+def _garantir_precomputo(catalogo):
+    """Garante _norm/_tipo/_toks/_diam/_dvar/_dflu em cada produto (idempotente)."""
+    for p in catalogo:
+        if "_toks" in p:
+            continue
+        if "_norm" not in p:
+            p["_norm"] = expandir(p["descricao"])
+        if "_tipo" not in p:
+            p["_tipo"] = tipo_de(p["_norm"])
+        d = p["_norm"]
+        p["_toks"] = set(d.split())
+        p["_diam"] = extrair_diametros(d)
+        p["_dvar"] = tuple(_variante(rgx, d) for _n, rgx, _w in _DIFERENCIADORES)
+        p["_dflu"] = _fluido(d)
+
+def _indice_invertido(catalogo):
+    chave = id(catalogo)
+    idx = _CAT_INV.get(chave)
+    if idx is not None and idx[0] == len(catalogo):
+        return idx[1]
+    _garantir_precomputo(catalogo)
+    inv = {}
+    for i, p in enumerate(catalogo):
+        for t in p["_toks"]:
+            inv.setdefault(t, []).append(i)
+    _CAT_INV[chave] = (len(catalogo), inv)
+    return inv
+
+_PESOS_DIF = [w for _n, _r, w in _DIFERENCIADORES]
+
+def buscar(descricao, catalogo, return_top=0):
     """
-    Retorna (produto, score, confiança).
+    Retorna (produto, score, confiança); se return_top>0, também uma lista com as
+    descrições dos melhores `return_top` candidatos (para dicas à IA).
     CONFIRMADO: score ≥ 80%  → entra na cotação automaticamente
     SUGESTÃO:   score 60-79% → listado para revisão manual, NÃO entra na cotação
     NÃO ENCONTRADO: < 60%
     """
+    inv = _indice_invertido(catalogo)
     qo = normalizar(descricao)
     qe = expandir(descricao)
     qt = tipo_de(qe)
     _qtok = set(qe.split())
-    best_prod, best_score, best_ov = None, 0.0, -1
+    qdiam = extrair_diametros(qe)
+    qk7 = "k7" in qe
+    qk9 = "k9" in qe
+    qvar = tuple(_variante(rgx, qe) for _n, rgx, _w in _DIFERENCIADORES)
+    qflu = _fluido(qe)
 
-    for p in catalogo:
+    # Candidatos = produtos que compartilham ao menos um token (ordenados por
+    # índice p/ manter o MESMO desempate do scan completo: menor índice vence).
+    cand = set()
+    for t in _qtok:
+        cand.update(inv.get(t, ()))
+    if not cand:
+        cand = range(len(catalogo))   # pedido sem token em comum: varre tudo
+    cand = sorted(cand)
+
+    best_prod, best_score, best_ov = None, 0.0, -1
+    top = [] if return_top else None
+    for i in cand:
+        p = catalogo[i]
         d = p["_norm"]
         # Múltiplas estratégias
         s = max(
@@ -682,20 +740,28 @@ def buscar(descricao, catalogo):
         )
         # Bônus por tipo de produto
         s += bonus_tipo(qe, d)
-        # Bônus/penalidade por diâmetro
-        dq, dp = extrair_diametros(qe), extrair_diametros(d)
-        if dq and dp:
-            s += 18 if dq & dp else -28
-        # Penalidade por diferenciadores fortes (K7/K9, ponta/bolsa, PN, SMU/SME, água/esg)
-        s += penalidade_diferenciador(qe, d)
+        # Bônus/penalidade por diâmetro (diâmetros do produto pré-computados)
+        dp = p["_diam"]
+        if qdiam and dp:
+            s += 18 if qdiam & dp else -28
+        # Penalidade por diferenciadores fortes (K7/K9, ponta/bolsa, PN, SMU/SME,
+        # água/esg) — variantes do produto pré-computadas em _dvar/_dflu.
+        pv = p["_dvar"]
+        for k in range(len(_PESOS_DIF)):
+            vq = qvar[k]
+            if vq and pv[k] and vq != pv[k]:
+                s -= _PESOS_DIF[k]
+        if qflu and p["_dflu"] and qflu != p["_dflu"]:
+            s -= 35
         # Ancoramento de tipo: penaliza forte produto de outra família
-        pt = p.get("_tipo")
+        pt = p["_tipo"]
         if qt and pt and qt != pt:
             s -= 45
         # Reforço quando a classe exata bate (ex.: cliente pede K9 e o produto é K9)
-        for _kc in ("k7", "k9"):
-            if _kc in qe and _kc in d:
-                s += 14
+        if qk7 and "k7" in d:
+            s += 14
+        if qk9 and "k9" in d:
+            s += 14
         s = min(100, max(0, s))
         # "cilíndrico" é forma especial (após o teto): só casa se pedido explicitamente
         if "cilindrico" in d and "cilindrico" not in qe:
@@ -703,15 +769,23 @@ def buscar(descricao, catalogo):
 
         # Desempate: em scores iguais (ex.: teto 100), prefere maior sobreposição
         # de termos (faz "água" decidir entre cilíndrico e ponta-bolsa, etc.)
-        ov = len(_qtok & set(d.split()))
+        ov = len(_qtok & p["_toks"])
         if s > best_score or (s == best_score and ov > best_ov):
             best_score, best_prod, best_ov = s, p, ov
+        if top is not None:
+            top.append((s, i))
 
     if best_score >= 80:
-        return best_prod, best_score, "CONFIRMADO"
+        conf = "CONFIRMADO"
     elif best_score >= 60:
-        return best_prod, best_score, "SUGESTÃO"
-    return best_prod, best_score, "NÃO ENCONTRADO"
+        conf = "SUGESTÃO"
+    else:
+        conf = "NÃO ENCONTRADO"
+    if top is not None:
+        top.sort(key=lambda x: x[0], reverse=True)
+        # devolve os ÍNDICES (no catálogo) dos melhores candidatos
+        return best_prod, best_score, conf, [idx for _s, idx in top[:return_top]]
+    return best_prod, best_score, conf
 
 
 def processar(itens_brutos, catalogo):
@@ -754,17 +828,31 @@ def processar_hibrido(itens_brutos, catalogo, usar_ia, correcoes=None, nao_traba
     nao_trabalhados = nao_trabalhados or set()
     por_desc = {p["descricao"]: p for p in catalogo}  # produto por descrição
 
-    # 1) Determinístico para todos (sempre)
+    # 1) Determinístico para todos (sempre). Memoiza por texto normalizado p/ não
+    #    repontuar itens repetidos (planilhas grandes costumam ter repetições) e
+    #    já captura os 3 melhores candidatos p/ usar como dica da IA — evitando uma
+    #    SEGUNDA varredura completa do catálogo só para montar as dicas.
     det = []
+    _cache_busca = {}
     for item in itens_brutos:
-        p, score, conf = buscar(item["descricao"], catalogo)
-        det.append({"item": item, "prod": p, "score": score, "conf": conf})
+        ck = normalizar(item["descricao"])
+        r = _cache_busca.get(ck)
+        if r is None:
+            r = buscar(item["descricao"], catalogo, return_top=15)
+            _cache_busca[ck] = r
+        p, score, conf, top = r
+        det.append({"item": item, "prod": p, "score": score, "conf": conf, "top": top})
 
     ia_res = None
     if usar_ia and matcher_ia is not None:
         try:
-            hints = [_hint_deterministico(it["descricao"], catalogo) for it in itens_brutos]
-            ia_res = matcher_ia.interpretar_itens(itens_brutos, catalogo, hints=hints, correcoes=correcoes)
+            # Dicas (texto) = 3 melhores; candidatos (índices) = 15 melhores, enviados
+            # como o ÚNICO trecho do catálogo que a IA precisa olhar (prompt enxuto →
+            # rápido e barato, em vez de mandar os ~6,4 mil produtos toda vez).
+            hints = [" | ".join(catalogo[i]["descricao"] for i in d["top"][:3]) for d in det]
+            candidatos = [d["top"] for d in det]
+            ia_res = matcher_ia.interpretar_itens(itens_brutos, catalogo, hints=hints,
+                                                  correcoes=correcoes, candidatos=candidatos)
         except Exception as e:
             st.warning(f"IA indisponível nesta cotação ({e}). Usando apenas o motor determinístico.")
             ia_res = None
@@ -1059,9 +1147,8 @@ def carregar_catalogo(tabela):
             catalogo = catalogo + dados_supabase.listar_produtos_manuais()
         except Exception:
             pass
-    for p in catalogo:
-        p["_norm"] = expandir(p["descricao"])
-        p["_tipo"] = tipo_de(p["_norm"])
+    # Pré-computa _norm/_tipo/_toks/_diam/_dvar/_dflu de cada produto (acelera buscar).
+    _garantir_precomputo(catalogo)
     return catalogo
 
 
@@ -1476,7 +1563,7 @@ with st.sidebar:
     tabela = st.selectbox("Tabela de preços", options=["consumo","revenda","pressao","smu","todos"],
         format_func=lambda x: {"consumo":"🏠 Consumo — HL Mar/2026",
                                 "revenda":"🏪 Revenda — HL Mar/2026",
-                                "pressao":"💧 Pressão — JGS Abr/2026",
+                                "pressao":"💧 Base JGS Completa",
                                 "smu":    "🔩 SMU — Fev/2026",
                                 "todos":  "📋 Todas as tabelas"}[x])
     # ── Condição de pagamento ──
@@ -2063,7 +2150,7 @@ if st.session_state.get("cotacao"):
 
     # Ações + download — barra FIXA no rodapé (sempre visível, sem rolar)
     tabelas_nome = {"consumo":"TABELA HL CONSUMO — Março/2026","revenda":"TABELA HL REVENDA — Março/2026",
-                    "pressao":"TABELA PRESSÃO JGS — Abril/2026","smu":"TABELA SMU — Fevereiro/2026","todos":"MÚLTIPLAS TABELAS"}
+                    "pressao":"BASE JGS COMPLETA","smu":"TABELA SMU — Fevereiro/2026","todos":"MÚLTIPLAS TABELAS"}
     cliente_dict = {"nome":nome,"cnpj":cnpj_input,"endereco":endereco,"telefone":telefone,"email":email}
     xlsx_bytes = gerar_xlsx_bytes(conf, sug, nao, num_orcamento, cliente_dict, tabelas_nome[tabela], vendedor, condicao_pagamento=cond_pagamento, consumidor_final=_C.get("consumidor_final", False))
     nome_arq = f"cotacao_{num_orcamento}_{nome.replace(' ','_')[:18]}.xlsx" if nome else f"cotacao_{num_orcamento}.xlsx"

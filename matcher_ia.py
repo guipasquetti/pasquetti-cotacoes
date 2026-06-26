@@ -130,7 +130,7 @@ def _exemplos_correcoes(correcoes, itens_brutos, limite=60):
         f"{linhas}\n"
     )
 
-def interpretar_itens(itens_brutos, catalogo, hints=None, correcoes=None):
+def interpretar_itens(itens_brutos, catalogo, hints=None, correcoes=None, candidatos=None):
     """
     Recebe itens brutos [{descricao, quantidade}] e o catálogo (lista de dicts
     com 'descricao' e 'preco'). Retorna lista alinhada por item:
@@ -145,15 +145,10 @@ def interpretar_itens(itens_brutos, catalogo, hints=None, correcoes=None):
     if not itens_brutos:
         return []
     client, modelo = _cliente()
-    cat_txt = _catalogo_texto(catalogo)
-
-    pedidos = []
-    for i, it in enumerate(itens_brutos):
-        linha = f"{i}\tqtd={it.get('quantidade',1)}\t{it['descricao']}"
-        if hints and i < len(hints) and hints[i]:
-            linha += f"\t[candidatos prováveis: {hints[i]}]"
-        pedidos.append(linha)
-    pedidos_txt = "\n".join(pedidos)
+    # Sem 'candidatos', envia o catálogo inteiro (comportamento antigo). Com
+    # 'candidatos' (índices por item do motor determinístico), envia em cada lote
+    # SÓ os produtos candidatos daquele lote — prompt minúsculo, rápido e barato.
+    cat_txt_full = None if candidatos is not None else _catalogo_texto(catalogo)
 
     exemplos = _exemplos_correcoes(correcoes, itens_brutos)
 
@@ -176,61 +171,90 @@ def interpretar_itens(itens_brutos, catalogo, hints=None, correcoes=None):
         "Responda SOMENTE com JSON válido, sem texto fora do JSON."
     )
 
-    user = (
-        "CATÁLOGO (índice<TAB>descrição<TAB>preço):\n"
-        f"{cat_txt}\n\n"
-        "ITENS SOLICITADOS (índice<TAB>qtd<TAB>texto do cliente):\n"
-        f"{pedidos_txt}\n\n"
-        "Devolva um objeto JSON no formato:\n"
-        '{"itens":[{"indice_item":0,"indice_catalogo":12,"confianca":92,'
-        '"justificativa":"..."}, ...]}\n'
-        "Inclua TODOS os itens solicitados, na ordem. indice_catalogo = null se nada servir."
-    )
+    # Processa em LOTES: o JSON de resposta de uma cotação grande (centenas de
+    # itens) estoura o max_tokens e a chamada falha. Quebrando em lotes, cada
+    # resposta cabe no limite. O catálogo (e seus índices) é o mesmo em todos os
+    # lotes, então indice_catalogo continua válido; só os índices de ITEM são
+    # locais ao lote e remapeados para a posição global.
+    resultado = [None] * len(itens_brutos)
+    LOTE = 50
+    for ini in range(0, len(itens_brutos), LOTE):
+        chunk = itens_brutos[ini:ini + LOTE]
+        pedidos = []
+        for j, it in enumerate(chunk):
+            gi = ini + j
+            linha = f"{j}\tqtd={it.get('quantidade',1)}\t{it['descricao']}"
+            if hints and gi < len(hints) and hints[gi]:
+                linha += f"\t[candidatos prováveis: {hints[gi]}]"
+            pedidos.append(linha)
+        pedidos_txt = "\n".join(pedidos)
 
-    msg = client.messages.create(
-        model=modelo,
-        max_tokens=4000,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-    )
-    texto = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
-    dados = _extrair_json(texto)
-
-    # Mapear resposta de volta, validando índices
-    por_item = {}
-    for r in (dados.get("itens") or []):
-        try:
-            ii = int(r["indice_item"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        por_item[ii] = r
-
-    resultado = []
-    for i, it in enumerate(itens_brutos):
-        r = por_item.get(i, {})
-        idx = r.get("indice_catalogo", None)
-        conf = r.get("confianca", 0)
-        try:
-            conf = float(conf)
-        except (TypeError, ValueError):
-            conf = 0.0
-        valido = isinstance(idx, int) and 0 <= idx < len(catalogo)
-        if not valido:
-            idx = None
-        if idx is not None and conf >= 80:
-            status = "CONFIRMADO"
-        elif idx is not None and conf >= 60:
-            status = "SUGESTÃO"
+        # Catálogo deste lote: só os candidatos (índices reais preservados) ou tudo.
+        if candidatos is not None:
+            idxs = set()
+            for j in range(len(chunk)):
+                for ci in (candidatos[ini + j] or ()):
+                    if isinstance(ci, int) and 0 <= ci < len(catalogo):
+                        idxs.add(ci)
+            cat_txt = "\n".join(
+                f"{ci}\t{catalogo[ci]['descricao']}\t(R$ {catalogo[ci]['preco']:.2f})"
+                for ci in sorted(idxs))
         else:
-            status = "NÃO ENCONTRADO"
-        resultado.append({
-            "descricao":     it["descricao"],
-            "quantidade":    it.get("quantidade", 1),
-            "indice":        idx,
-            "confianca":     conf,
-            "status":        status,
-            "justificativa": r.get("justificativa", ""),
-        })
+            cat_txt = cat_txt_full
+
+        user = (
+            "CATÁLOGO (índice<TAB>descrição<TAB>preço):\n"
+            f"{cat_txt}\n\n"
+            "ITENS SOLICITADOS (índice<TAB>qtd<TAB>texto do cliente):\n"
+            f"{pedidos_txt}\n\n"
+            "Devolva um objeto JSON no formato:\n"
+            '{"itens":[{"indice_item":0,"indice_catalogo":12,"confianca":92,'
+            '"justificativa":"..."}, ...]}\n'
+            "Inclua TODOS os itens solicitados, na ordem. indice_catalogo = null se nada servir."
+        )
+
+        msg = client.messages.create(
+            model=modelo,
+            max_tokens=8192,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        texto = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+        dados = _extrair_json(texto)
+
+        por_item = {}
+        for r in (dados.get("itens") or []):
+            try:
+                ii = int(r["indice_item"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            por_item[ii] = r
+
+        for j, it in enumerate(chunk):
+            r = por_item.get(j, {})
+            idx = r.get("indice_catalogo", None)
+            conf = r.get("confianca", 0)
+            try:
+                conf = float(conf)
+            except (TypeError, ValueError):
+                conf = 0.0
+            valido = isinstance(idx, int) and 0 <= idx < len(catalogo)
+            if not valido:
+                idx = None
+            if idx is not None and conf >= 80:
+                status = "CONFIRMADO"
+            elif idx is not None and conf >= 60:
+                status = "SUGESTÃO"
+            else:
+                status = "NÃO ENCONTRADO"
+            resultado[ini + j] = {
+                "descricao":     it["descricao"],
+                "quantidade":    it.get("quantidade", 1),
+                "indice":        idx,
+                "confianca":     conf,
+                "status":        status,
+                "justificativa": r.get("justificativa", ""),
+            }
     return resultado
 
 
